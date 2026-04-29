@@ -202,28 +202,30 @@ def split_message(text: str, max_length: int = 4096) -> List[str]:
 
 
 def send_message_with_retry(text: str, max_retries: int = 3, retry_delay: float = 5.0,
-                            parse_mode: str = 'HTML') -> bool:
+                            parse_mode: str = 'HTML',
+                            reply_markup: Optional[dict] = None) -> bool:
     """
     Send a message with exponential backoff retry.
-    
+
     Args:
         text: Message text
         max_retries: Maximum number of retry attempts
         retry_delay: Initial delay between retries (doubles each time)
         parse_mode: Parse mode for Telegram
-        
+        reply_markup: Optional inline keyboard markup
+
     Returns:
         True if sent successfully within retries, False otherwise
     """
     for attempt in range(max_retries):
-        if send_message(text, parse_mode):
+        if send_message(text, parse_mode, reply_markup):
             return True
-        
+
         if attempt < max_retries - 1:
             delay = retry_delay * (2 ** attempt)  # Exponential backoff
             logger.warning(f"Retry {attempt + 1}/{max_retries} in {delay:.1f}s...")
             time.sleep(delay)
-    
+
     logger.error(f"Failed to send message after {max_retries} attempts")
     return False
 

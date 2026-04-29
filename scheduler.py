@@ -123,12 +123,17 @@ def run_news_cycle() -> bool:
                 )
                 batches.append(message)
             
+            # Build inline keyboard for predictions
+            keyboard = telegram_bot.build_predictions_keyboard()
+
             # Send each batch
             all_sent = True
             for i, msg in enumerate(batches):
                 if i > 0:
                     time.sleep(2)  # Rate limit between messages
-                success = telegram_bot.send_message_with_retry(msg)
+                # Attach keyboard only to first message
+                reply_markup = keyboard if i == 0 else None
+                success = telegram_bot.send_message_with_retry(msg, reply_markup=reply_markup)
                 if not success:
                     all_sent = False
                     logger.error(f"Failed to send batch {i + 1}/{len(batches)}")
