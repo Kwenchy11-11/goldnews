@@ -87,25 +87,86 @@ CATEGORY_INFO = {
             'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
         ),
     },
+    'oil': {
+        'label_th': 'ราคาน้ำมัน',
+        'emoji': '⛽',
+        'explanation': (
+            'ราคาน้ำมันมีผลต่อเงินเฟ้อ → กระทบทองคำ\n'
+            '• น้ำมันแพง → ต้นทุนสินค้าสูง → เงินเฟ้อ → ทองมักขึ้น\n'
+            '• น้ำมันถูก → เงินเฟ้อต่ำ → ทองอาจลง\n'
+            'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
+        ),
+    },
+    'geopolitics': {
+        'label_th': 'ภูมิรัฐศาสตร์/สงคราม',
+        'emoji': '⚔️',
+        'explanation': (
+            'สงครามและความขัดแย้ง → นักลงทุนหนีไปถือทอง (Safe Haven)\n'
+            '• ตึงเครียดมาก → ทองมักขึ้น\n'
+            '• สงบลง → ทองอาจลง\n'
+            'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
+        ),
+    },
+    'politics': {
+        'label_th': 'การเมืองสหรัฐฯ',
+        'emoji': '🇺🇸',
+        'explanation': (
+            'นโยบายสหรัฐฯ มีผลต่อดอลลาร์ → กระทบทองคำ\n'
+            '• นโยบายเข้ม → ดอลลาร์แข็ง → ทองอาจลง\n'
+            '• นโยบายผ่อนคลาย → ดอลลาร์อ่อน → ทองมักขึ้น\n'
+            'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
+        ),
+    },
 }
 
 
 def _categorize_market(question: str, description: str = '') -> str:
-    """Categorize a market into fed/inflation/gold/employment/economy."""
+    """Categorize a market into fed/inflation/gold/employment/economy/geopolitics/oil/politics."""
     combined = (question + ' ' + description).lower()
 
+    # Fed/Interest rates
     if any(kw in combined for kw in ['fed rate', 'federal reserve', 'interest rate', 'fed fund',
-                                      'fed raise', 'fed cut', 'fed hold', 'the fed ']):
+                                       'fed raise', 'fed cut', 'fed hold', 'the fed ',
+                                       'fomc', 'monetary policy', 'powell']):
         return 'fed'
-    if any(kw in combined for kw in ['inflation', 'cpi', 'consumer price']):
-        return 'inflation'
+
+    # Gold
     if any(kw in combined for kw in ['gold price', 'gold above', 'gold below', 'gold at',
-                                      'gold hit', 'gold reach', 'xauusd', 'gold end',
-                                      'gold close', 'gold finish']):
+                                       'gold hit', 'gold reach', 'xauusd', 'gold end',
+                                       'gold close', 'gold finish', 'gold to ',
+                                       'ounce of gold', 'gold will']):
         return 'gold'
+
+    # Inflation
+    if any(kw in combined for kw in ['inflation', 'cpi', 'ppi', 'consumer price',
+                                       'producer price', 'price index']):
+        return 'inflation'
+
+    # Employment
     if any(kw in combined for kw in ['job', 'employment', 'unemployment', 'nonfarm',
-                                      'payroll', 'labor']):
+                                       'payroll', 'labor', 'jobless']):
         return 'employment'
+
+    # Oil/Commodities (exclude "Brentford" football team)
+    if any(kw in combined for kw in ['oil price', 'crude oil', 'brent crude', 'wti', 'opec',
+                                       'petrol', 'oil to ', 'oil above', 'oil below',
+                                       'barrel', 'oil production']):
+        return 'oil'
+
+    # Geopolitics/War
+    if any(kw in combined for kw in ['war ', 'conflict', 'tension', 'escalat', 'sanction',
+                                       'nuclear', 'military', 'terror', 'attack',
+                                       'iran', 'israel', 'saudi', 'russia', 'ukraine',
+                                       'china', 'taiwan', 'middle east', 'north korea']):
+        return 'geopolitics'
+
+    # US Politics
+    if any(kw in combined for kw in ['trump', 'biden', 'republican', 'democrat', 'election',
+                                       'president', 'senate', 'congress', 'fiscal policy',
+                                       'tax', 'tariff', 'trade war']):
+        return 'politics'
+
+    # Economy (default)
     return 'economy'
 
 

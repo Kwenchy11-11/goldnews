@@ -478,7 +478,7 @@ def format_predictions_message(predictions: List[PredictionMarket]) -> str:
     )
 
     by_category = get_predictions_by_category(predictions)
-    category_order = ['fed', 'gold', 'inflation', 'employment', 'economy']
+    category_order = ['fed', 'gold', 'inflation', 'employment', 'oil', 'geopolitics', 'politics', 'economy']
 
     for category in category_order:
         if category not in by_category:
