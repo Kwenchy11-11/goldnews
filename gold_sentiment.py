@@ -12,6 +12,13 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 
 
+def _get_attr(obj, attr, default=None):
+    """Safely get attribute from dict or object."""
+    if isinstance(obj, dict):
+        return obj.get(attr, default)
+    return getattr(obj, attr, default)
+
+
 @dataclass
 class SentimentResult:
     """Gold sentiment analysis result."""
@@ -43,7 +50,11 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
     gold_target_market = None
     
     for market in markets:
-        q_lower = market.question.lower()
+        # Handle both dict and object access
+        if isinstance(market, dict):
+            q_lower = market.get('question', '').lower()
+        else:
+            q_lower = market.question.lower()
         
         # Ceasefire detection
         if any(kw in q_lower for kw in ['ceasefire', 'cease-fire', 'หยุดยิง']):
@@ -63,13 +74,14 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
     
     # Analyze Ceasefire (Geopolitics)
     if ceasefire_market:
-        outcomes = ceasefire_market.outcomes
+        outcomes = _get_attr(ceasefire_market, 'outcomes', [])
         # Find "Yes" (ceasefire happens) probability
         yes_prob = None
         for outcome in outcomes:
-            name = outcome['name'].lower()
+            name = outcome.get('name', '').lower() if isinstance(outcome, dict) else outcome.name.lower()
+            price = outcome.get('price', 0) if isinstance(outcome, dict) else outcome.price
             if 'yes' in name or 'ใช่' in name or 'เกิด' in name:
-                yes_prob = outcome['price'] * 100
+                yes_prob = price * 100
                 break
         
         if yes_prob is not None:
@@ -84,53 +96,56 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
     
     # Analyze Oil
     if oil_market:
-        outcomes = oil_market.outcomes
+        outcomes = _get_attr(oil_market, 'outcomes', [])
         for outcome in outcomes:
-            name = outcome['name'].lower()
-            price = outcome['price'] * 100
+            name = outcome.get('name', '').lower() if isinstance(outcome, dict) else outcome.name.lower()
+            price = outcome.get('price', 0) if isinstance(outcome, dict) else outcome.price
+            price_pct = price * 100
             # If oil price going UP
-            if any(kw in name for kw in ['up', 'above', 'higher', 'ขึ้น']) and price > 50:
+            if any(kw in name for kw in ['up', 'above', 'higher', 'ขึ้น']) and price_pct > 50:
                 score += 15
-                reasons.append(f"🟢 น้ำมันแนวโน้มขึ้น ({price:.0f}%) = เงินเฟ้อ/สงคราม")
+                reasons.append(f"🟢 น้ำมันแนวโน้มขึ้น ({price_pct:.0f}%) = เงินเฟ้อ/สงคราม")
                 break
             # If oil price going DOWN
-            if any(kw in name for kw in ['down', 'below', 'lower', 'ลง']) and price > 50:
+            if any(kw in name for kw in ['down', 'below', 'lower', 'ลง']) and price_pct > 50:
                 score -= 15
-                reasons.append(f"🔴 น้ำมันแนวโน้มลง ({price:.0f}%) = สงบ")
+                reasons.append(f"🔴 น้ำมันแนวโน้มลง ({price_pct:.0f}%) = สงบ")
                 break
     
     # Analyze Fed Rate Cut
     if fed_cut_market:
-        outcomes = fed_cut_market.outcomes
+        outcomes = _get_attr(fed_cut_market, 'outcomes', [])
         for outcome in outcomes:
-            name = outcome['name'].lower()
-            price = outcome['price'] * 100
+            name = outcome.get('name', '').lower() if isinstance(outcome, dict) else outcome.name.lower()
+            price = outcome.get('price', 0) if isinstance(outcome, dict) else outcome.price
+            price_pct = price * 100
             # If rate cut is likely
-            if any(kw in name for kw in ['cut', 'ลด', '0.25', '25bps']) and price > 50:
+            if any(kw in name for kw in ['cut', 'ลด', '0.25', '25bps']) and price_pct > 50:
                 score += 25
-                reasons.append(f"🟢 เฟดลดดอกเบี้ยสูง ({price:.0f}%) = USD อ่อน")
+                reasons.append(f"🟢 เฟดลดดอกเบี้ยสูง ({price_pct:.0f}%) = USD อ่อน")
                 break
             # If rate hike is likely
-            if any(kw in name for kw in ['hike', 'raise', 'ขึ้น', 'increase']) and price > 50:
+            if any(kw in name for kw in ['hike', 'raise', 'ขึ้น', 'increase']) and price_pct > 50:
                 score -= 25
-                reasons.append(f"🔴 เฟดขึ้นดอกเบี้ยสูง ({price:.0f}%) = USD แข็ง")
+                reasons.append(f"🔴 เฟดขึ้นดอกเบี้ยสูง ({price_pct:.0f}%) = USD แข็ง")
                 break
     
     # Analyze Gold Target
     if gold_target_market:
-        outcomes = gold_target_market.outcomes
+        outcomes = _get_attr(gold_target_market, 'outcomes', [])
         for outcome in outcomes:
-            name = outcome['name'].lower()
-            price = outcome['price'] * 100
+            name = outcome.get('name', '').lower() if isinstance(outcome, dict) else outcome.name.lower()
+            price = outcome.get('price', 0) if isinstance(outcome, dict) else outcome.price
+            price_pct = price * 100
             # If gold expected to go ABOVE target
-            if any(kw in name for kw in ['above', 'higher', 'break', 'ขึ้น', 'เกิน']) and price > 50:
+            if any(kw in name for kw in ['above', 'higher', 'break', 'ขึ้น', 'เกิน']) and price_pct > 50:
                 score += 30
-                reasons.append(f"🟢 ทองคำทะลุเป้า ({price:.0f}%) = Bullish")
+                reasons.append(f"🟢 ทองคำทะลุเป้า ({price_pct:.0f}%) = Bullish")
                 break
             # If gold expected to stay BELOW
-            if any(kw in name for kw in ['below', 'lower', 'under', 'ต่ำกว่า']) and price > 50:
+            if any(kw in name for kw in ['below', 'lower', 'under', 'ต่ำกว่า']) and price_pct > 50:
                 score -= 30
-                reasons.append(f"🔴 ทองคำไม่ทะลุเปา ({price:.0f}%) = Bearish")
+                reasons.append(f"🔴 ทองคำไม่ทะลุเปา ({price_pct:.0f}%) = Bearish")
                 break
     
     # Determine label
