@@ -17,6 +17,7 @@ import analyzer
 from analyzer import MarketSummary
 import formatter
 import telegram_bot
+import polymarket_predictions
 
 logger = logging.getLogger('goldnews')
 
@@ -65,7 +66,11 @@ def run_news_cycle() -> bool:
         # Step 1b: Fetch real-time news from RSS feeds
         realtime_items = realtime_news.fetch_realtime_news()
 
-        logger.info(f"Fetched {len(events)} events, {len(markets)} markets, {len(realtime_items)} real-time news")
+        # Step 1c: Fetch Polymarket predictions (gold, Fed, inflation, etc.)
+        predictions = polymarket_predictions.fetch_polymarket_predictions()
+
+        logger.info(f"Fetched {len(events)} events, {len(markets)} markets, "
+                    f"{len(realtime_items)} real-time news, {len(predictions)} predictions")
         
         # Step 2: Batch analyze events (one Gemini call for all)
         if events:
@@ -92,10 +97,10 @@ def run_news_cycle() -> bool:
             logger.info("No relevant events to analyze")
         
         # Step 4: Format and send messages in batches
-        if high_analyses or markets:
+        if high_analyses or markets or predictions:
             batch_size = 10
             batches = []
-            
+
             if high_analyses:
                 for i in range(0, len(high_analyses), batch_size):
                     batch = high_analyses[i:i + batch_size]
@@ -105,11 +110,17 @@ def run_news_cycle() -> bool:
                     batch_summary = summary if i == 0 else None
                     # Only include real-time news in the first batch
                     batch_realtime = realtime_items if i == 0 else None
-                    message = formatter.format_daily_summary(batch, batch_markets, batch_summary, batch_realtime)
+                    # Only include predictions in the first batch
+                    batch_predictions = predictions if i == 0 else None
+                    message = formatter.format_daily_summary(
+                        batch, batch_markets, batch_summary, batch_realtime, batch_predictions
+                    )
                     batches.append(message)
             else:
-                # Only Polymarket data, no events
-                message = formatter.format_daily_summary([], markets, summary)
+                # Only Polymarket data/predictions, no events
+                message = formatter.format_daily_summary(
+                    [], markets, summary, realtime_items, predictions
+                )
                 batches.append(message)
             
             # Send each batch

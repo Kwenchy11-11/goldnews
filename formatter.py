@@ -18,6 +18,7 @@ import config
 from analyzer import AnalysisResult, MarketSummary
 from news_fetcher import PolymarketData
 from realtime_news import RealTimeNewsItem
+from polymarket_predictions import PredictionMarket, CATEGORY_INFO
 
 logger = logging.getLogger('goldnews')
 
@@ -173,6 +174,132 @@ def format_polymarket_summary(markets: List[PolymarketData]) -> str:
     return message
 
 
+def format_predictions_section(predictions: List[PredictionMarket],
+                                max_per_category: int = 2) -> str:
+    """
+    Format Polymarket prediction markets into a beginner-friendly Thai section.
+
+    Groups by category (Fed, Gold, Inflation, etc.) with:
+    - Emoji indicators
+    - Thai translations
+    - Beginner explanations
+    - Probability percentages
+
+    Args:
+        predictions: List of PredictionMarket objects
+        max_per_category: Max markets to show per category
+
+    Returns:
+        Formatted HTML string for Telegram
+    """
+    if not predictions:
+        return ""
+
+    # Group by category
+    by_category = {}
+    for p in predictions:
+        if p.category not in by_category:
+            by_category[p.category] = []
+        by_category[p.category].append(p)
+
+    message = (
+        f"\n🎯 <b>ตลาดคาดการณ์อะไรอยู่? (Polymarket)</b>\n"
+        f"{'─' * 30}\n"
+        f"<i>ตัวเลข % = ความน่าจะเป็นที่ตลาดคาดการณ์</i>\n"
+        f"<i>🟢 = มีโอกาสสูง | 🟡 = เป็นไปได้ | 🔴 = โอกาสน้อย</i>\n\n"
+    )
+
+    # Show categories in priority order
+    category_order = ['fed', 'gold', 'inflation', 'employment', 'economy']
+
+    for category in category_order:
+        if category not in by_category:
+            continue
+
+        cat_markets = by_category[category][:max_per_category]
+        cat_info = CATEGORY_INFO.get(category, {})
+        cat_emoji = cat_info.get('emoji', '📌')
+        cat_label = cat_info.get('label_th', category.capitalize())
+
+        message += f"{cat_emoji} <b>{cat_label}</b>\n"
+
+        for market in cat_markets:
+            # Format outcomes
+            outcomes_str = _format_outcomes_thai(market.outcomes, market.category)
+            message += f"• {market.question_th}\n"
+            message += f"{outcomes_str}\n"
+
+        message += "\n"
+
+    # Add beginner explanation at the bottom
+    message += (
+        f"💡 <b>อ่านยังไง?</b>\n"
+        f"Polymarket คือตลาดที่คนทั่วโลกมา \"เดิมพัน\" ว่าเหตุการณ์ต่างๆ จะเกิดขึ้นหรือไม่\n"
+        f"• ถ้าคนส่วนใหญ่เชื่อว่า Fed จะขึ้นดอกเบี้ย → % ของ \"ขึ้น\" จะสูง\n"
+        f"• ถ้า % สูง = ตลาดมองว่ามีโอกาสเกิดสูง\n"
+        f"• ทองคำมัก <b>ขึ้น</b> เมื่อ Fed ลดดอกเบี้ย หรือเศรษฐกิจแย่\n"
+        f"• ทองคำมัก <b>ลง</b> เมื่อ Fed ขึ้นดอกเบี้ย หรือเศรษฐกิจดี\n"
+    )
+
+    return message
+
+
+def _format_outcomes_thai(outcomes: List[dict], category: str) -> str:
+    """Format market outcomes with Thai labels and probability bars."""
+    lines = []
+    for outcome in outcomes[:3]:  # Max 3 outcomes
+        name = outcome.get('name', '')
+        price = outcome.get('price', 0)
+        pct = price * 100
+
+        # Translate outcome name
+        name_th = _translate_outcome_name(name, category)
+
+        # Visual bar
+        bar_filled = int(pct / 10)
+        bar_empty = 10 - bar_filled
+        bar = '█' * bar_filled + '░' * bar_empty
+
+        # Color indicator
+        if pct >= 60:
+            indicator = '🟢'
+        elif pct >= 40:
+            indicator = '🟡'
+        else:
+            indicator = '🔴'
+
+        lines.append(f"  {indicator} {name_th} {bar} {pct:.0f}%")
+
+    return '\n'.join(lines)
+
+
+def _translate_outcome_name(name: str, category: str) -> str:
+    """Translate outcome names to Thai."""
+    name_lower = name.lower()
+
+    # Yes/No
+    if name_lower in ('yes', 'yeah', 'true'):
+        return 'ใช่'
+    if name_lower in ('no', 'nope', 'false'):
+        return 'ไม่ใช่'
+
+    # Fed outcomes
+    if 'raise' in name_lower or 'increase' in name_lower or 'hike' in name_lower:
+        return 'ขึ้นดอกเบี้ย'
+    if 'cut' in name_lower or 'decrease' in name_lower or 'reduce' in name_lower:
+        return 'ลดดอกเบี้ย'
+    if 'hold' in name_lower or 'keep' in name_lower or 'unchanged' in name_lower:
+        return 'คงดอกเบี้ย'
+
+    # Direction
+    if 'above' in name_lower or 'higher' in name_lower or 'up' in name_lower:
+        return 'สูงกว่า'
+    if 'below' in name_lower or 'lower' in name_lower or 'down' in name_lower:
+        return 'ต่ำกว่า'
+
+    return name
+
+
 def format_market_summary(summary: MarketSummary) -> str:
     """
     Format the overall market summary section.
@@ -239,13 +366,15 @@ def format_event_item(analysis: AnalysisResult, index: int, is_released: bool) -
 def format_daily_summary(analyses: List[AnalysisResult],
                           markets: Optional[List[PolymarketData]] = None,
                           summary: Optional[MarketSummary] = None,
-                          realtime_news: Optional[List[RealTimeNewsItem]] = None) -> str:
+                          realtime_news: Optional[List[RealTimeNewsItem]] = None,
+                          predictions: Optional[List[PredictionMarket]] = None) -> str:
     """
     Format a complete daily summary message combining all analyses.
 
     Separates events into "Released" (ประกาศแล้ว) and "Upcoming" (กำลังจะมา).
     Shows conditional analysis for upcoming events.
     Includes real-time news section if available.
+    Includes Polymarket predictions section with beginner-friendly explanations.
     """
     now = get_now_ict()
     day_thai = config.DAY_THAI.get(now.weekday(), '')
@@ -334,9 +463,13 @@ def format_daily_summary(analyses: List[AnalysisResult],
     if realtime_news:
         message += _format_realtime_news_section(realtime_news, max_items=5)
 
-    # Polymarket section
+    # Polymarket section (legacy format)
     if markets:
         message += format_polymarket_summary(markets)
+
+    # Polymarket Predictions section (new format with beginner explanations)
+    if predictions:
+        message += format_predictions_section(predictions)
 
     # Footer
     message += f"\n{'─' * 30}\n<i>🔄 ตรวจสอบใหม่ใน {config.CHECK_INTERVAL} นาที</i>"
