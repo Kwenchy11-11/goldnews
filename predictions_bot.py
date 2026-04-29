@@ -265,7 +265,7 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
 
     markets_data = []
 
-    # Strategy 1: Fetch from economics tag (tag_id=107)
+    # Strategy 1: Fetch from economics tag (tag_id=107) - PRIMARY SOURCE
     try:
         response = requests.get(
             'https://gamma-api.polymarket.com/markets',
@@ -286,37 +286,14 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
     except Exception as e:
         logger.warning(f"Failed to fetch economics tag markets: {e}")
 
-    # Strategy 2: Search with specific queries
-    search_queries = ['fed', 'interest rate', 'cpi', 'inflation', 'gold price', 'recession']
-    for query in search_queries:
-        try:
-            response = requests.get(
-                'https://gamma-api.polymarket.com/markets',
-                params={
-                    'active': 'true',
-                    'closed': 'false',
-                    'limit': '50',
-                    'q': query,
-                },
-                timeout=15,
-                headers={'Accept': 'application/json'}
-            )
-            response.raise_for_status()
-            data = response.json()
-            market_list = data if isinstance(data, list) else data.get('markets', data)
-            markets_data.extend(market_list)
-            logger.info(f"Search '{query}': {len(market_list)} results")
-        except Exception as e:
-            logger.warning(f"Failed to search '{query}': {e}")
-
-    # Strategy 3: Events API with economics tag
+    # Strategy 2: Events API with economics tag - gets nested markets
     try:
         response = requests.get(
             'https://gamma-api.polymarket.com/events',
             params={
                 'active': 'true',
                 'closed': 'false',
-                'limit': '50',
+                'limit': '100',
                 'tag_id': '107',
             },
             timeout=15,
@@ -331,6 +308,26 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
             logger.info(f"Fetched markets from {len(events_data)} events")
     except Exception as e:
         logger.warning(f"Failed to fetch events: {e}")
+
+    # Strategy 3: Direct fetch without tag filter (catches markets not tagged)
+    try:
+        response = requests.get(
+            'https://gamma-api.polymarket.com/markets',
+            params={
+                'active': 'true',
+                'closed': 'false',
+                'limit': '500',
+            },
+            timeout=15,
+            headers={'Accept': 'application/json'}
+        )
+        response.raise_for_status()
+        data = response.json()
+        market_list = data if isinstance(data, list) else data.get('markets', data)
+        markets_data.extend(market_list)
+        logger.info(f"Fetched {len(market_list)} markets from direct fetch")
+    except Exception as e:
+        logger.warning(f"Failed to fetch direct markets: {e}")
 
     if not markets_data:
         logger.info("No Polymarket data available from any source")
@@ -357,22 +354,36 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
             if not any(kw in combined for kw in relevant_keywords):
                 continue
 
-            # STRICT: Filter by year - only 2024-2025 markets (not 2026)
+            # Filter by year - allow 2026 for Fed markets (they're about 2026 rate cuts)
+            # But skip very distant markets (2027+)
             import re
             year_match = re.search(r'\b(20\d{2})\b', question)
             if year_match:
                 year = int(year_match.group(1))
-                if year > 2025:
-                    # Skip markets ending in 2026+ unless nuclear-related
+                if year > 2026:
+                    # Skip markets ending in 2027+ unless nuclear-related
                     if 'nuclear' not in combined and 'nuke' not in combined:
                         continue
 
-            # STRICT: Russia/Ukraine only if nuclear-related
+            # Russia/Ukraine only if nuclear-related
             if any(kw in combined for kw in ['putin', 'zelenskyy', 'ukraine', 'russia']):
                 if 'nuclear' not in combined and 'nuke' not in combined:
                     continue  # Skip non-nuclear Russia/Ukraine news
 
             category = _categorize_market(question, description)
+
+            # Category-specific volume thresholds
+            # Fed: $100k (high liquidity today), Gold/Oil: $10k (early signals)
+            volume = float(market.get('volume', market.get('volumeNum', 0)))
+            if category == 'fed':
+                min_volume = 100000
+            elif category in ('gold', 'risk_factors'):
+                min_volume = 10000
+            else:
+                min_volume = 50000
+
+            if volume < min_volume:
+                continue
 
             outcomes = []
             try:
@@ -397,7 +408,6 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
             if not outcomes:
                 continue
 
-            volume = float(market.get('volume', market.get('volumeNum', 0)))
             slug = market.get('slug', '')
             url = f"https://polymarket.com/event/{slug}" if slug else ''
             question_th = _translate_question(question, category)
