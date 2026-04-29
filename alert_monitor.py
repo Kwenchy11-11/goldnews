@@ -299,30 +299,36 @@ def send_alert(alert: MarketAlert) -> bool:
 
 
 def check_and_alert():
-    """Check for new markets and volatility alerts."""
+    """Check for significant probability changes (>5%) - EMERGENCY ALERTS ONLY."""
     if not should_check_now():
         return
 
     # Import here to avoid circular import
+    import predictions_bot
     import volatility_tracker
 
-    logger.info("Checking for new markets and volatility...")
+    logger.info("Checking for volatility alerts (>5% changes)...")
 
-    # Check for new markets
-    new_markets = find_new_markets()
-    for market in new_markets:
-        logger.info(f"New market found: {market.question_th}")
-        success = send_alert(market)
-        if success:
-            add_to_seen(market.market_id)
-            logger.info(f"Alert sent and marked as seen: {market.market_id}")
-        else:
-            logger.warning(f"Failed to send alert for: {market.market_id}")
+    # Fetch current markets
+    markets = predictions_bot.fetch_polymarket_predictions()
 
     # Check for volatility alerts (>5% change)
-    # Note: volatility_tracker needs PredictionMarket objects, not MarketAlert
-    # We'll skip this for now since we're using different data structures
-    # TODO: Integrate volatility tracking when we refactor to use common types
+    volatility_alerts = volatility_tracker.check_volatility_alerts(markets)
+
+    for alert in volatility_alerts:
+        logger.info(f"VOLATILITY ALERT: {alert.question_th} changed {alert.change_pct:+.1f}%")
+        message = volatility_tracker.format_volatility_alert(alert)
+        success = send_message(message)
+        if success:
+            logger.info(f"Volatility alert sent: {alert.question_th}")
+        else:
+            logger.warning(f"Failed to send volatility alert: {alert.question_th}")
+
+    # Record current prices for next comparison
+    volatility_tracker.record_current_prices(markets)
+
+    # Note: We NO LONGER send alerts for new markets (too spammy)
+    # Only emergency alerts on >5% probability changes
 
 
 class AlertMonitor:

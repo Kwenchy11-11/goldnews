@@ -58,7 +58,7 @@ class PredictionMarket:
 
 CATEGORY_INFO = {
     'fed': {
-        'label_th': 'ดอกเบี้ยเฟด',
+        'label_th': '🏦 Fed & Interest Rates',
         'emoji': '🏦',
         'explanation': (
             'คณะกรรมการนโยบายการเงินของสหรัฐฯ (Fed) จะตัดสินใจเรื่องดอกเบี้ย\n'
@@ -68,7 +68,7 @@ CATEGORY_INFO = {
         ),
     },
     'inflation': {
-        'label_th': 'เงินเฟ้อ',
+        'label_th': '💰 Inflation (CPI/PPI)',
         'emoji': '💰',
         'explanation': (
             'เงินเฟ้อคือภาวะที่สินค้าแพงขึ้นเรื่อยๆ\n'
@@ -78,7 +78,7 @@ CATEGORY_INFO = {
         ),
     },
     'gold': {
-        'label_th': 'ราคาทอง',
+        'label_th': '🥇 Gold Price Targets',
         'emoji': '🥇',
         'explanation': (
             'ตลาดคาดการณ์ราคาทองคำว่าจะไปถึงระดับไหน\n'
@@ -87,23 +87,14 @@ CATEGORY_INFO = {
             'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
         ),
     },
-    'employment': {
-        'label_th': 'การจ้างงาน',
-        'emoji': '👷',
+    'risk_factors': {
+        'label_th': '🔥 Risk Factors (War/Oil)',
+        'emoji': '🔥',
         'explanation': (
-            'ข้อมูลการจ้างงานในสหรัฐฯ เช่น ตัวเลขคนตกงาน\n'
-            '• จ้างงานดี → เศรษฐกิจแข็ง → Fed อาจขึ้นดอกเบี้ย → ทองอาจลง\n'
-            '• จ้างงานแย่ → เศรษฐกิจอ่อน → Fed อาจลดดอกเบี้ย → ทองอาจขึ้น\n'
-            'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
-        ),
-    },
-    'economy': {
-        'label_th': 'เศรษฐกิจ',
-        'emoji': '📊',
-        'explanation': (
-            'ข้อมูลเศรษฐกิจอื่นๆ เช่น GDP, การเติบโตของเศรษฐกิจ\n'
-            '• เศรษฐกิจดี → ดอลลาร์แข็ง → ทองอาจลง\n'
-            '• เศรษฐกิจแย่ → ดอลลาร์อ่อน → ทองมักขึ้น\n'
+            'ปัจจัยเสี่ยงที่กระทบทองคำแรงมาก\n'
+            '• สงครามตะวันออกกลาง → ทองขึ้น (safe haven)\n'
+            '• น้ำมันแพง → เงินเฟ้อ → ทองขึ้น\n'
+            '• นิวเคลียร์ → ทองพุ่ง (risk-off extreme)\n'
             'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
         ),
     },
@@ -111,21 +102,30 @@ CATEGORY_INFO = {
 
 
 def _categorize_market(question: str, description: str = '') -> str:
-    """Categorize a market into fed/inflation/gold/employment/economy."""
+    """Categorize a market into clear trading-relevant categories."""
     combined = (question + ' ' + description).lower()
 
+    # Fed & Interest Rates (primary driver)
     if any(kw in combined for kw in ['fed rate', 'federal reserve', 'interest rate', 'fed fund',
-                                       'fed raise', 'fed cut', 'fed hold', 'the fed ']):
+                                       'fed raise', 'fed cut', 'fed hold', 'the fed ', 'fomc']):
         return 'fed'
-    if any(kw in combined for kw in ['inflation', 'cpi', 'consumer price']):
-        return 'inflation'
+
+    # Gold Price Targets (direct trading)
     if any(kw in combined for kw in ['gold price', 'gold above', 'gold below', 'gold at',
                                        'gold hit', 'gold reach', 'xauusd', 'gold end',
-                                       'gold close', 'gold finish']):
+                                       'gold close', 'gold finish', 'gold $', 'xau']):
         return 'gold'
-    if any(kw in combined for kw in ['job', 'employment', 'unemployment', 'nonfarm',
-                                       'payroll', 'labor']):
-        return 'employment'
+
+    # Inflation Data (CPI/PPI)
+    if any(kw in combined for kw in ['inflation', 'cpi', 'consumer price', 'ppi']):
+        return 'inflation'
+
+    # Risk Factors: Oil, War, Middle East (geopolitical risk → gold safe haven)
+    if any(kw in combined for kw in ['oil', 'brent', 'wti', 'น้ำมัน',
+                                       'iran', 'israel', 'gaza', 'lebanon', 'hezbollah',
+                                       'ceasefire', 'หยุดยิง', 'war', 'nuclear', 'nuke']):
+        return 'risk_factors'
+
     return 'economy'
 
 
@@ -218,29 +218,45 @@ def _translate_outcome_name(name: str, category: str) -> str:
 
 def fetch_polymarket_predictions() -> List[PredictionMarket]:
     """Fetch prediction markets from Polymarket Gamma API."""
-    # Broad keywords — just need to catch Fed/Econ/Gold markets
+    # STRICT keywords — only Gold/Fed/CPI/Oil/Middle East that impact gold prices
+    # Note: Using word boundaries to avoid false positives (e.g., 'gold' in 'Goldman')
     relevant_keywords = [
-        # Fed / Interest rates (broad matching)
-        'fed rate', 'federal reserve', 'interest rate', 'fomc', 'rate decision',
-        'rate cut', 'rate hike', 'rate hold', 'monetary policy',
-        'fed cut', 'fed hike', 'fed hold', 'fed raise', 'the fed ',
-        # Gold
-        'gold price', 'gold above', 'gold below', 'gold at', 'gold hit',
-        'gold reach', 'gold end', 'gold close', 'gold finish', 'xauusd',
-        # Inflation
-        'inflation', 'cpi', 'consumer price', 'ppi',
-        # Employment
-        'nonfarm', 'unemployment', 'jobless', 'payroll', 'jobs report',
-        # Economy
-        'gdp', 'recession', 'economic growth', 'treasury',
+        # Gold (primary focus) - avoid matching 'Goldman'
+        'gold price', 'gold above', 'gold below', 'gold $', 'gold at', 'gold hit',
+        'gold reach', 'xau', 'xauusd', 'ทองคำ', 'ทอง',
+        # Fed / Interest rates (direct impact on gold)
+        'fed', 'fomc', 'federal reserve', 'interest rate', 'rate decision',
+        'rate cut', 'rate hike', 'rate hold',
+        # Inflation (CPI/PPI impact on gold)
+        'cpi', 'inflation', 'consumer price', 'ppi',
+        # Oil (inflation/war hedge, impacts gold)
+        'oil', 'brent', 'wti', 'crude', 'น้ำมัน',
+        # Middle East conflicts (geopolitical risk → gold)
+        'iran', 'israel', 'middle east', 'gaza', 'lebanon', 'hezbollah',
+        'ceasefire', 'หยุดยิง', 'สงคราม',
+        # War-related (but avoid 'war' in names like 'Warren')
+        ' war ', 'war in', 'war by', 'war on', 'war?', 'war.', 'war,',
+        # Nuclear threats (immediate gold impact)
+        'nuclear', 'nuke', 'นิวเคลียร์',
     ]
 
+    # STRICT exclusion — remove political noise that doesn't impact gold
     exclude_keywords = [
+        # Sports
         'nhl', 'nba', 'nfl', 'mlb', 'soccer', 'football', 'hockey',
         'basketball', 'baseball', 'stanley cup', 'super bowl',
         'olympics', 'world cup', 'championship',
-        'crypto', 'bitcoin', 'ethereum',
-        'openai', 'chatgpt', 'ai company', 'tech company',
+        # Crypto
+        'crypto', 'bitcoin', 'ethereum', 'btc', 'eth',
+        # Tech companies
+        'openai', 'chatgpt', 'ai company', 'tech company', 'tesla',
+        # US Politics (unless economic policy)
+        'trump', 'biden', 'election', 'vote', 'polling',
+        # UK/EU Politics
+        'uk election', 'british', 'germany election', 'france election',
+        # Generic Russia/Ukraine (keep only if nuclear-related - checked separately)
+        'putin', 'zelenskyy', 'president russia', 'president ukraine',
+        'ukraine election', 'russia election', 'netanyahu',
     ]
 
     markets_data = []
@@ -336,6 +352,21 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
 
             if not any(kw in combined for kw in relevant_keywords):
                 continue
+
+            # STRICT: Filter by year - only 2024-2025 markets (not 2026)
+            import re
+            year_match = re.search(r'\b(20\d{2})\b', question)
+            if year_match:
+                year = int(year_match.group(1))
+                if year > 2025:
+                    # Skip markets ending in 2026+ unless nuclear-related
+                    if 'nuclear' not in combined and 'nuke' not in combined:
+                        continue
+
+            # STRICT: Russia/Ukraine only if nuclear-related
+            if any(kw in combined for kw in ['putin', 'zelenskyy', 'ukraine', 'russia']):
+                if 'nuclear' not in combined and 'nuke' not in combined:
+                    continue  # Skip non-nuclear Russia/Ukraine news
 
             category = _categorize_market(question, description)
 
@@ -505,11 +536,11 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
     )
 
     by_category = get_predictions_by_category(predictions)
-    # Filter: Show only high-impact categories for trading
-    # Fed decisions and Gold targets are most important for XAU/USD
-    priority_categories = ['fed', 'gold', 'inflation']
+    # Show only categories that impact gold trading
+    # Ordered by importance for traders
+    display_categories = ['fed', 'gold', 'inflation', 'risk_factors']
 
-    for category in priority_categories:
+    for category in display_categories:
         if category not in by_category:
             continue
 
@@ -524,27 +555,6 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
             outcomes_str = _format_outcomes_detailed(market)
             message += f"• {market.question_th}\n"
             message += f"{outcomes_str}\n"
-
-        message += "\n"
-
-    # Risk Factors section - Oil and Geopolitics (high impact on gold)
-    risk_categories = ['geopolitics']
-    has_risk = any(cat in by_category for cat in risk_categories)
-
-    if has_risk:
-        message += "⚠️ <b>ปัจจัยเสี่ยง (Risk Factors)</b>\n"
-        message += "<i>เหตุการณ์เหล่านี้กระทบทองคำแรงมาก</i>\n\n"
-
-        for category in risk_categories:
-            if category not in by_category:
-                continue
-
-            cat_markets = by_category[category][:2]  # Show max 2 risk markets
-
-            for market in cat_markets:
-                outcomes_str = _format_outcomes_detailed(market)
-                message += f"• {market.question_th}\n"
-                message += f"{outcomes_str}\n"
 
         message += "\n"
 
