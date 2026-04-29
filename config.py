@@ -20,6 +20,13 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 # Predictions bot (separate bot for /predictions command only)
 PREDICTIONS_BOT_TOKEN = os.getenv('PREDICTIONS_BOT_TOKEN', '')
 
+# Auto-alert settings
+ENABLE_AUTO_ALERTS = os.getenv('ENABLE_AUTO_ALERTS', 'false').lower() == 'true'
+ALERT_CHECK_INTERVAL = int(os.getenv('ALERT_CHECK_INTERVAL', '5'))  # minutes
+ALERT_WINDOW_START = os.getenv('ALERT_WINDOW_START', '20:30')  # Thai time
+ALERT_WINDOW_END = os.getenv('ALERT_WINDOW_END', '21:30')    # Thai time
+ALERT_VOLUME_THRESHOLD = int(os.getenv('ALERT_VOLUME_THRESHOLD', '10000'))  # USD
+
 # Optional settings with defaults
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '30'))  # minutes
 MARKET_HOURS_ONLY = os.getenv('MARKET_HOURS_ONLY', 'true').lower() == 'true'
