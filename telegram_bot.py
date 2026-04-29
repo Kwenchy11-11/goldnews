@@ -17,7 +17,8 @@ logger = logging.getLogger('goldnews')
 
 
 def send_message(text: str, parse_mode: str = 'HTML',
-                 reply_markup: Optional[dict] = None) -> bool:
+                 reply_markup: Optional[dict] = None,
+                 chat_id: Optional[str] = None) -> bool:
     """
     Send a message to the configured Telegram chat.
     Automatically splits messages that exceed Telegram's 4096 character limit.
@@ -26,12 +27,18 @@ def send_message(text: str, parse_mode: str = 'HTML',
         text: Message text (HTML formatted)
         parse_mode: Parse mode (HTML, Markdown, MarkdownV2)
         reply_markup: Optional inline keyboard markup
+        chat_id: Override chat ID (for command responses)
 
     Returns:
         True if sent successfully, False otherwise
     """
-    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
-        logger.warning("Telegram bot token or chat ID not configured")
+    if not config.TELEGRAM_BOT_TOKEN:
+        logger.warning("Telegram bot token not configured")
+        return False
+
+    target_chat_id = chat_id or config.TELEGRAM_CHAT_ID
+    if not target_chat_id:
+        logger.warning("No chat ID configured")
         return False
 
     # Telegram's max message length
@@ -39,7 +46,7 @@ def send_message(text: str, parse_mode: str = 'HTML',
 
     # If message fits, send as-is
     if len(text) <= MAX_LENGTH:
-        return _send_single_message(text, parse_mode, reply_markup)
+        return _send_single_message(text, parse_mode, reply_markup, target_chat_id)
 
     # Split long messages into chunks
     chunks = split_message(text, MAX_LENGTH)
@@ -50,14 +57,15 @@ def send_message(text: str, parse_mode: str = 'HTML',
             time.sleep(1)  # Rate limit between chunks
         # Only attach keyboard to first chunk
         markup = reply_markup if i == 0 else None
-        if not _send_single_message(chunk, parse_mode, markup):
+        if not _send_single_message(chunk, parse_mode, markup, target_chat_id):
             all_sent = False
 
     return all_sent
 
 
 def _send_single_message(text: str, parse_mode: str = 'HTML',
-                         reply_markup: Optional[dict] = None) -> bool:
+                         reply_markup: Optional[dict] = None,
+                         chat_id: Optional[str] = None) -> bool:
     """
     Send a single message to Telegram (internal helper).
 
@@ -65,6 +73,7 @@ def _send_single_message(text: str, parse_mode: str = 'HTML',
         text: Message text
         parse_mode: Parse mode
         reply_markup: Optional inline keyboard markup
+        chat_id: Target chat ID
 
     Returns:
         True if sent successfully, False otherwise
@@ -72,7 +81,7 @@ def _send_single_message(text: str, parse_mode: str = 'HTML',
     url = f"{config.TELEGRAM_API_URL}/sendMessage"
 
     payload = {
-        'chat_id': config.TELEGRAM_CHAT_ID,
+        'chat_id': chat_id or config.TELEGRAM_CHAT_ID,
         'text': text,
         'parse_mode': parse_mode,
         'disable_web_page_preview': True,
@@ -203,7 +212,8 @@ def split_message(text: str, max_length: int = 4096) -> List[str]:
 
 def send_message_with_retry(text: str, max_retries: int = 3, retry_delay: float = 5.0,
                             parse_mode: str = 'HTML',
-                            reply_markup: Optional[dict] = None) -> bool:
+                            reply_markup: Optional[dict] = None,
+                            chat_id: Optional[str] = None) -> bool:
     """
     Send a message with exponential backoff retry.
 
@@ -213,12 +223,13 @@ def send_message_with_retry(text: str, max_retries: int = 3, retry_delay: float 
         retry_delay: Initial delay between retries (doubles each time)
         parse_mode: Parse mode for Telegram
         reply_markup: Optional inline keyboard markup
+        chat_id: Override chat ID (for command responses)
 
     Returns:
         True if sent successfully within retries, False otherwise
     """
     for attempt in range(max_retries):
-        if send_message(text, parse_mode, reply_markup):
+        if send_message(text, parse_mode, reply_markup, chat_id):
             return True
 
         if attempt < max_retries - 1:
@@ -249,8 +260,13 @@ def send_startup_message() -> bool:
     """Send a startup notification to confirm the bot is running."""
     message = (
         "🟡 <b>Gold News Bot เริ่มทำงาน</b>\n\n"
-        f"⏰ ตรวจสอบข่าวทุก {config.CHECK_INTERVAL} นาที\n"
+        f" ตรวจสอบข่าวทุก {config.CHECK_INTERVAL} นาที\n"
         f"📅 วันจันทร์-ศุกร์ (เวลาตลาด)\n\n"
+        " <b>คำสั่งที่ใช้ได้:</b>\n"
+        "🎯 /predictions — ดูตลาดคาดการณ์ Polymarket\n"
+        " /news — ดึงข่าวล่าสุดทันที\n"
+        "📊 /status — ดูสถานะบอท\n"
+        "❓ /help — แสดงคำสั่งทั้งหมด\n\n"
         "<i>บอทพร้อมส่งข่าวสำคัญที่มีผลต่อราคาทองคำ</i>"
     )
     return send_message(message)

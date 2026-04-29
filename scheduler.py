@@ -17,7 +17,6 @@ import analyzer
 from analyzer import MarketSummary
 import formatter
 import telegram_bot
-import polymarket_predictions
 
 logger = logging.getLogger('goldnews')
 
@@ -66,11 +65,11 @@ def run_news_cycle() -> bool:
         # Step 1b: Fetch real-time news from RSS feeds
         realtime_items = realtime_news.fetch_realtime_news()
 
-        # Step 1c: Fetch Polymarket predictions (gold, Fed, inflation, etc.)
-        predictions = polymarket_predictions.fetch_polymarket_predictions()
-
         logger.info(f"Fetched {len(events)} events, {len(markets)} markets, "
-                    f"{len(realtime_items)} real-time news, {len(predictions)} predictions")
+                    f"{len(realtime_items)} real-time news")
+
+        # Note: Polymarket predictions are now handled via /predictions command
+        # They are NOT included in automatic messages
         
         # Step 2: Batch analyze events (one Gemini call for all)
         if events:
@@ -97,7 +96,7 @@ def run_news_cycle() -> bool:
             logger.info("No relevant events to analyze")
         
         # Step 4: Format and send messages in batches
-        if high_analyses or markets or predictions:
+        if high_analyses or markets:
             batch_size = 10
             batches = []
 
@@ -110,30 +109,21 @@ def run_news_cycle() -> bool:
                     batch_summary = summary if i == 0 else None
                     # Only include real-time news in the first batch
                     batch_realtime = realtime_items if i == 0 else None
-                    # Only include predictions in the first batch
-                    batch_predictions = predictions if i == 0 else None
                     message = formatter.format_daily_summary(
-                        batch, batch_markets, batch_summary, batch_realtime, batch_predictions
+                        batch, batch_markets, batch_summary, batch_realtime
                     )
                     batches.append(message)
             else:
-                # Only Polymarket data/predictions, no events
-                message = formatter.format_daily_summary(
-                    [], markets, summary, realtime_items, predictions
-                )
+                # Only Polymarket data, no events
+                message = formatter.format_daily_summary([], markets, summary, realtime_items)
                 batches.append(message)
             
-            # Build inline keyboard for predictions
-            keyboard = telegram_bot.build_predictions_keyboard()
-
             # Send each batch
             all_sent = True
             for i, msg in enumerate(batches):
                 if i > 0:
                     time.sleep(2)  # Rate limit between messages
-                # Attach keyboard only to first message
-                reply_markup = keyboard if i == 0 else None
-                success = telegram_bot.send_message_with_retry(msg, reply_markup=reply_markup)
+                success = telegram_bot.send_message_with_retry(msg)
                 if not success:
                     all_sent = False
                     logger.error(f"Failed to send batch {i + 1}/{len(batches)}")
