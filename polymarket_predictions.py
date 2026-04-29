@@ -241,19 +241,29 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
         'manufacturing', 'industrial production', 'trade deficit',
         # Treasury/Yield
         'treasury', 'yield', 'bond', '10-year',
+        # Oil/Commodities (affects inflation -> affects gold)
+        'oil price', 'crude oil', 'brent', 'wti', 'opec', 'petrol',
+        'commodity', 'silver', 'copper',
+        # Geopolitics (safe haven demand)
+        'middle east', 'iran', 'israel', 'saudi', 'russia', 'ukraine',
+        'war ', 'conflict', 'tension', 'escalat', 'sanction',
+        'nuclear', 'military', 'terror', 'attack',
+        # US Politics (affects USD -> affects gold)
+        'trump', 'biden', 'republican', 'democrat', 'election',
+        'fiscal policy', 'tax', 'tariff', 'trade war',
     ]
 
     # Exclude irrelevant markets
     exclude_keywords = [
         'nhl', 'nba', 'nfl', 'mlb', 'soccer', 'football', 'hockey',
         'basketball', 'baseball', 'stanley cup', 'super bowl',
-        'olympics', 'world cup', 'championship', 'election',
-        'president', 'senate', 'congress', 'governor', 'trump',
-        'biden', 'crypto', 'bitcoin', 'ethereum', 'solana', 'dogecoin',
+        'olympics', 'world cup', 'championship',
         'weather', 'temperature', 'hurricane', 'storm', 'snow',
         'entertainment', 'movie', 'oscar', 'grammy', 'award',
         'sports', 'game', 'match', 'win', 'lose', 'score',
         'vegas', 'atlanta', 'los angeles', 'new york',
+        # Exclude crypto but NOT political figures (they affect gold!)
+        'bitcoin', 'ethereum', 'solana', 'dogecoin', 'crypto',
     ]
 
     markets_data = []
