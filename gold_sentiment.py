@@ -157,10 +157,26 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
         label = "Neutral ⚪"
     
     # Format reasoning
+    missing_data_warnings = []
+    if not fed_cut_market:
+        missing_data_warnings.append("⚠️ ไม่พบตลาด Fed Decision")
+    if not gold_target_market:
+        missing_data_warnings.append("⚠️ ไม่พบตลาด Gold Target")
+    if not oil_market:
+        missing_data_warnings.append("⚠️ ไม่พบตลาด Oil")
+    if not ceasefire_market:
+        missing_data_warnings.append("⚠️ ไม่พบตลาด Geopolitics")
+    
     if reasons:
         reasoning = "\n".join(reasons)
+        if missing_data_warnings:
+            reasoning += "\n\n<b>ข้อมูลขาดหาย:</b>\n" + "\n".join(missing_data_warnings)
     else:
-        reasoning = "📊 ไม่พบข้อมูลเพียงพอสำหรับประเมิน"
+        if missing_data_warnings:
+            reasoning = "<b>⚠️ ไม่พบข้อมูลเพียงพอสำหรับประเมิน</b>\n\n" + "\n".join(missing_data_warnings)
+            reasoning += "\n\n<i>กรุณาตรวจสอบตลาดใน Polymarket โดยตรง</i>"
+        else:
+            reasoning = "📊 ไม่พบข้อมูลเพียงพอสำหรับประเมิน"
     
     return SentimentResult(
         score=max(-100, min(100, score)),  # Clamp between -100 and 100

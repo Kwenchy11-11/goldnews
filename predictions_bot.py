@@ -224,16 +224,20 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
         # Gold (primary focus) - avoid matching 'Goldman'
         'gold price', 'gold above', 'gold below', 'gold $', 'gold at', 'gold hit',
         'gold reach', 'xau', 'xauusd', 'ทองคำ', 'ทอง',
-        # Fed / Interest rates (direct impact on gold)
+        # Fed / Interest rates (direct impact on gold) - EXPANDED for FOMC
         'fed', 'fomc', 'federal reserve', 'interest rate', 'rate decision',
-        'rate cut', 'rate hike', 'rate hold',
+        'rate cut', 'rate hike', 'rate hold', 'fed decision', 'fomc meeting',
+        'fed rate', 'federal open market',
         # Inflation (CPI/PPI impact on gold)
         'cpi', 'inflation', 'consumer price', 'ppi',
-        # Oil (inflation/war hedge, impacts gold)
-        'oil', 'brent', 'wti', 'crude', 'น้ำมัน',
+        # Oil (inflation/war hedge, impacts gold) - EXPANDED for Hormuz
+        'oil', 'brent', 'wti', 'crude', 'น้ำมัน', 'hormuz', 'strait', 'blockade',
+        'oil price', 'oil supply', 'oil disruption',
         # Middle East conflicts (geopolitical risk → gold)
         'iran', 'israel', 'middle east', 'gaza', 'lebanon', 'hezbollah',
         'ceasefire', 'หยุดยิง', 'สงคราม',
+        # Trump policy (can impact gold via trade wars/policy)
+        'trump tariff', 'trump trade', 'trump policy', 'trump executive',
         # War-related (but avoid 'war' in names like 'Warren')
         ' war ', 'war in', 'war by', 'war on', 'war?', 'war.', 'war,',
         # Nuclear threats (immediate gold impact)
@@ -250,8 +254,8 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
         'crypto', 'bitcoin', 'ethereum', 'btc', 'eth',
         # Tech companies
         'openai', 'chatgpt', 'ai company', 'tech company', 'tesla',
-        # US Politics (unless economic policy)
-        'trump', 'biden', 'election', 'vote', 'polling',
+        # US Politics (only exclude personality politics, keep policy)
+        'biden', 'election', 'vote', 'polling', 'campaign',
         # UK/EU Politics
         'uk election', 'british', 'germany election', 'france election',
         # Generic Russia/Ukraine (keep only if nuclear-related - checked separately)

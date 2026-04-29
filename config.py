@@ -22,9 +22,9 @@ PREDICTIONS_BOT_TOKEN = os.getenv('PREDICTIONS_BOT_TOKEN', '')
 
 # Auto-alert settings
 ENABLE_AUTO_ALERTS = os.getenv('ENABLE_AUTO_ALERTS', 'false').lower() == 'true'
-ALERT_CHECK_INTERVAL = int(os.getenv('ALERT_CHECK_INTERVAL', '5'))  # minutes
-ALERT_WINDOW_START = os.getenv('ALERT_WINDOW_START', '20:30')  # Thai time
-ALERT_WINDOW_END = os.getenv('ALERT_WINDOW_END', '21:30')    # Thai time
+ALERT_CHECK_INTERVAL = int(os.getenv('ALERT_CHECK_INTERVAL', '15'))  # minutes - FOMC tonight: check every 15 min
+ALERT_WINDOW_START = os.getenv('ALERT_WINDOW_START', '20:00')  # Thai time - Extended for FOMC
+ALERT_WINDOW_END = os.getenv('ALERT_WINDOW_END', '23:00')    # Thai time - Extended for FOMC
 ALERT_VOLUME_THRESHOLD = int(os.getenv('ALERT_VOLUME_THRESHOLD', '50000'))  # USD - Filter noise (was 20k, now 50k for higher quality)
 
 # Optional settings with defaults
