@@ -130,15 +130,35 @@ def _translate_question(question: str, category: str) -> str:
     """Provide a Thai translation/explanation for the market question."""
     q_lower = question.lower()
 
-    if 'fed rate' in q_lower or 'federal reserve' in q_lower or 'the fed ' in q_lower:
-        if 'raise' in q_lower or 'increase' in q_lower or 'hike' in q_lower:
-            return 'เฟดจะขึ้นดอกเบี้ยหรือไม่?'
-        if 'cut' in q_lower or 'decrease' in q_lower or 'reduce' in q_lower:
-            return 'เฟดจะลดดอกเบี้ยหรือไม่?'
-        if 'hold' in q_lower or 'keep' in q_lower or 'unchanged' in q_lower:
-            return 'เฟดจะคงดอกเบี้ยหรือไม่?'
-        return 'การตัดสินใจดอกเบี้ยของเฟด'
+    # Extract numbers and years for context
+    import re
+    numbers = re.findall(r'\d+', question)
+    year_match = re.search(r'\b(20\d{2})\b', question)
+    year_str = f" ปี {year_match.group(1)}" if year_match else ""
 
+    # Fed rate decisions
+    if 'fed rate' in q_lower or 'federal reserve' in q_lower or 'the fed ' in q_lower or 'fomc' in q_lower:
+        # Number of rate cuts
+        cuts_match = re.search(r'(\d+\s*(?:or\s*more\s*)?)\s*fed\s*rate\s*cuts?', q_lower)
+        no_cuts_match = re.search(r'no\s+fed\s*rate\s*cuts?', q_lower)
+
+        if no_cuts_match:
+            return f'เฟดจะไม่ลดดอกเบี้ยเลย{year_str}?'
+        if cuts_match:
+            num = cuts_match.group(1).strip()
+            # Clean up "or more" to Thai
+            num = num.replace('or more', 'ขึ้นไป').replace('  ', ' ')
+            return f'เฟดจะลดดอกเบี้ย {num} ครั้ง{year_str}?'
+
+        if 'raise' in q_lower or 'increase' in q_lower or 'hike' in q_lower:
+            return f'เฟดจะขึ้นดอกเบี้ย{year_str}?'
+        if 'cut' in q_lower or 'decrease' in q_lower or 'reduce' in q_lower:
+            return f'เฟดจะลดดอกเบี้ย{year_str}?'
+        if 'hold' in q_lower or 'keep' in q_lower or 'unchanged' in q_lower:
+            return f'เฟดจะคงดอกเบี้ย{year_str}?'
+        return f'การตัดสินใจดอกเบี้ยของเฟด{year_str}'
+
+    # Gold price targets
     if 'gold' in q_lower:
         if 'above' in q_lower:
             match = re.search(r'\$?([\d,]+)', question)
@@ -150,14 +170,21 @@ def _translate_question(question: str, category: str) -> str:
             return f'ราคาทองจะต่ำกว่า ${price} หรือไม่?'
         return 'คาดการณ์ราคาทองคำ'
 
+    # Inflation
     if 'inflation' in q_lower or 'cpi' in q_lower:
         return 'คาดการณ์เงินเฟ้อ (CPI)'
 
+    # Employment
     if 'job' in q_lower or 'employment' in q_lower or 'unemployment' in q_lower:
         return 'คาดการณ์การจ้างงาน'
 
+    # GDP
     if 'gdp' in q_lower:
         return 'คาดการณ์ GDP (ผลิตภัณฑ์มวลรวม)'
+
+    # Recession
+    if 'recession' in q_lower:
+        return f'เศรษฐกิจสหรัฐฯ จะเข้าสู่ภาวะถดถอย{year_str}?'
 
     return question
 
@@ -188,46 +215,87 @@ def _translate_outcome_name(name: str, category: str) -> str:
 
 def fetch_polymarket_predictions() -> List[PredictionMarket]:
     """Fetch prediction markets from Polymarket Gamma API."""
+    # Broad keywords — just need to catch Fed/Econ/Gold markets
     relevant_keywords = [
+        # Fed / Interest rates (broad matching)
+        'fed rate', 'federal reserve', 'interest rate', 'fomc', 'rate decision',
+        'rate cut', 'rate hike', 'rate hold', 'monetary policy',
+        'fed cut', 'fed hike', 'fed hold', 'fed raise', 'the fed ',
+        # Gold
         'gold price', 'gold above', 'gold below', 'gold at', 'gold hit',
         'gold reach', 'gold end', 'gold close', 'gold finish', 'xauusd',
-        'fed rate', 'federal reserve', 'interest rate', 'fed fund',
-        'the fed ', 'fed raise', 'fed cut', 'fed hold',
-        'inflation', 'cpi', 'consumer price',
-        'nonfarm', 'unemployment', 'jobless', 'payroll',
-        'gdp', 'recession', 'economic growth',
+        # Inflation
+        'inflation', 'cpi', 'consumer price', 'ppi',
+        # Employment
+        'nonfarm', 'unemployment', 'jobless', 'payroll', 'jobs report',
+        # Economy
+        'gdp', 'recession', 'economic growth', 'treasury',
     ]
 
     exclude_keywords = [
         'nhl', 'nba', 'nfl', 'mlb', 'soccer', 'football', 'hockey',
         'basketball', 'baseball', 'stanley cup', 'super bowl',
-        'olympics', 'world cup', 'championship', 'election',
-        'president', 'senate', 'congress', 'governor', 'trump',
-        'biden', 'crypto', 'bitcoin', 'ethereum',
+        'olympics', 'world cup', 'championship',
+        'crypto', 'bitcoin', 'ethereum',
+        'openai', 'chatgpt', 'ai company', 'tech company',
     ]
 
     markets_data = []
 
-    # Try markets API
+    # Strategy 1: Fetch from economics tag (tag_id=107)
     try:
         response = requests.get(
             'https://gamma-api.polymarket.com/markets',
-            params={'active': 'true', 'closed': 'false', 'limit': '200'},
+            params={
+                'active': 'true',
+                'closed': 'false',
+                'limit': '500',
+                'tag_id': '107',  # Business/Economics tag
+            },
             timeout=15,
             headers={'Accept': 'application/json'}
         )
         response.raise_for_status()
         data = response.json()
-        market_list = data.get('markets', data) if isinstance(data, dict) else data
+        market_list = data if isinstance(data, list) else data.get('markets', data)
         markets_data.extend(market_list)
+        logger.info(f"Fetched {len(market_list)} markets from economics tag")
     except Exception as e:
-        logger.warning(f"Failed to fetch Polymarket markets: {e}")
+        logger.warning(f"Failed to fetch economics tag markets: {e}")
 
-    # Try events API with economics tag
+    # Strategy 2: Search with specific queries
+    search_queries = ['fed', 'interest rate', 'cpi', 'inflation', 'gold price', 'recession']
+    for query in search_queries:
+        try:
+            response = requests.get(
+                'https://gamma-api.polymarket.com/markets',
+                params={
+                    'active': 'true',
+                    'closed': 'false',
+                    'limit': '50',
+                    'q': query,
+                },
+                timeout=15,
+                headers={'Accept': 'application/json'}
+            )
+            response.raise_for_status()
+            data = response.json()
+            market_list = data if isinstance(data, list) else data.get('markets', data)
+            markets_data.extend(market_list)
+            logger.info(f"Search '{query}': {len(market_list)} results")
+        except Exception as e:
+            logger.warning(f"Failed to search '{query}': {e}")
+
+    # Strategy 3: Events API with economics tag
     try:
         response = requests.get(
             'https://gamma-api.polymarket.com/events',
-            params={'active': 'true', 'closed': 'false', 'limit': '50', 'tag': 'economics'},
+            params={
+                'active': 'true',
+                'closed': 'false',
+                'limit': '50',
+                'tag_id': '107',
+            },
             timeout=15,
             headers={'Accept': 'application/json'}
         )
@@ -237,8 +305,9 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
             for event in events_data:
                 for market in event.get('markets', []):
                     markets_data.append(market)
+            logger.info(f"Fetched markets from {len(events_data)} events")
     except Exception as e:
-        logger.warning(f"Failed to fetch Polymarket events: {e}")
+        logger.warning(f"Failed to fetch events: {e}")
 
     if not markets_data:
         logger.info("No Polymarket data available from any source")
