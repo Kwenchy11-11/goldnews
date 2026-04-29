@@ -8,7 +8,7 @@ Calculate gold sentiment based on market relationships:
 - Fed rate hike probability up = Bearish 🔴 (stronger USD)
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 
 
@@ -20,7 +20,7 @@ class SentimentResult:
     reasoning: str
 
 
-def calculate_gold_sentiment(markets: List[Dict]) -> SentimentResult:
+def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
     """
     Calculate gold sentiment score based on market relationships.
     
@@ -43,7 +43,7 @@ def calculate_gold_sentiment(markets: List[Dict]) -> SentimentResult:
     gold_target_market = None
     
     for market in markets:
-        q_lower = market.get('question', '').lower()
+        q_lower = market.question.lower()
         
         # Ceasefire detection
         if any(kw in q_lower for kw in ['ceasefire', 'cease-fire', 'หยุดยิง']):
@@ -63,20 +63,20 @@ def calculate_gold_sentiment(markets: List[Dict]) -> SentimentResult:
     
     # Analyze Ceasefire (Geopolitics)
     if ceasefire_market:
-        outcomes = ceasefire_market.get('outcomes', [])
+        outcomes = ceasefire_market.outcomes
         # Find "Yes" (ceasefire happens) probability
         yes_prob = None
         for outcome in outcomes:
-            name = outcome.get('name', '').lower()
+            name = outcome['name'].lower()
             if 'yes' in name or 'ใช่' in name or 'เกิด' in name:
-                yes_prob = outcome.get('price', 0) * 100
+                yes_prob = outcome['price'] * 100
                 break
         
         if yes_prob is not None:
             if yes_prob < 40:
                 # Ceasefire unlikely = war continues = bullish for gold
                 score += 20
-                reasons.append(f"🟢 โอกาสหยุดยิงต่ำ ({yes_prob:.0f}%) = สงครามยัง持续")
+                reasons.append(f"🟢 โอกาสหยุดยิงต่ำ ({yes_prob:.0f}%) = สงครามยังดำเนิน")
             elif yes_prob > 60:
                 # Ceasefire likely = peace = bearish for gold
                 score -= 20
@@ -84,10 +84,10 @@ def calculate_gold_sentiment(markets: List[Dict]) -> SentimentResult:
     
     # Analyze Oil
     if oil_market:
-        outcomes = oil_market.get('outcomes', [])
+        outcomes = oil_market.outcomes
         for outcome in outcomes:
-            name = outcome.get('name', '').lower()
-            price = outcome.get('price', 0) * 100
+            name = outcome['name'].lower()
+            price = outcome['price'] * 100
             # If oil price going UP
             if any(kw in name for kw in ['up', 'above', 'higher', 'ขึ้น']) and price > 50:
                 score += 15
@@ -96,15 +96,15 @@ def calculate_gold_sentiment(markets: List[Dict]) -> SentimentResult:
             # If oil price going DOWN
             if any(kw in name for kw in ['down', 'below', 'lower', 'ลง']) and price > 50:
                 score -= 15
-                reasons.append(f"🔴 น้ำมันแนวโน้มลง ({price:.0f}%) = สงบ)")
+                reasons.append(f"🔴 น้ำมันแนวโน้มลง ({price:.0f}%) = สงบ")
                 break
     
     # Analyze Fed Rate Cut
     if fed_cut_market:
-        outcomes = fed_cut_market.get('outcomes', [])
+        outcomes = fed_cut_market.outcomes
         for outcome in outcomes:
-            name = outcome.get('name', '').lower()
-            price = outcome.get('price', 0) * 100
+            name = outcome['name'].lower()
+            price = outcome['price'] * 100
             # If rate cut is likely
             if any(kw in name for kw in ['cut', 'ลด', '0.25', '25bps']) and price > 50:
                 score += 25
@@ -118,10 +118,10 @@ def calculate_gold_sentiment(markets: List[Dict]) -> SentimentResult:
     
     # Analyze Gold Target
     if gold_target_market:
-        outcomes = gold_target_market.get('outcomes', [])
+        outcomes = gold_target_market.outcomes
         for outcome in outcomes:
-            name = outcome.get('name', '').lower()
-            price = outcome.get('price', 0) * 100
+            name = outcome['name'].lower()
+            price = outcome['price'] * 100
             # If gold expected to go ABOVE target
             if any(kw in name for kw in ['above', 'higher', 'break', 'ขึ้น', 'เกิน']) and price > 50:
                 score += 30
