@@ -25,7 +25,7 @@ ENABLE_AUTO_ALERTS = os.getenv('ENABLE_AUTO_ALERTS', 'false').lower() == 'true'
 ALERT_CHECK_INTERVAL = int(os.getenv('ALERT_CHECK_INTERVAL', '5'))  # minutes
 ALERT_WINDOW_START = os.getenv('ALERT_WINDOW_START', '20:30')  # Thai time
 ALERT_WINDOW_END = os.getenv('ALERT_WINDOW_END', '21:30')    # Thai time
-ALERT_VOLUME_THRESHOLD = int(os.getenv('ALERT_VOLUME_THRESHOLD', '10000'))  # USD
+ALERT_VOLUME_THRESHOLD = int(os.getenv('ALERT_VOLUME_THRESHOLD', '20000'))  # USD - Filter noise
 
 # Optional settings with defaults
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '30'))  # minutes
@@ -47,6 +47,18 @@ EMPLOYMENT_KEYWORDS = ['nfp', 'non-farm', 'unemployment', 'employment', 'จ้�
 
 # All relevant keywords combined
 RELEVANT_KEYWORDS = GOLD_KEYWORDS + USD_KEYWORDS + INFLATION_KEYWORDS + EMPLOYMENT_KEYWORDS
+
+# Priority categories for display (hide politics/economy noise)
+PRIORITY_CATEGORIES = ['fed', 'gold', 'inflation', 'geopolitics']
+HIDDEN_CATEGORIES = ['politics', 'economy', 'employment']
+
+# Smart alert keywords - immediate alert for new markets with these
+SMART_ALERT_KEYWORDS = [
+    'gold', 'xau', 'ทองคำ', 'ทอง',
+    'fed', 'fomc', 'interest rate', 'ดอกเบี้ย',
+    'ceasefire', 'หยุดยิง', 'cease-fire',
+    'gaza', 'israel', 'hamas', 'ukraine', 'russia'
+]
 
 # Thai translations for common economic event titles
 THAI_TRANSLATIONS = {

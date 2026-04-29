@@ -195,6 +195,12 @@ def fetch_fresh_markets() -> List[dict]:
     ]
 
 
+def _matches_smart_alert_keywords(question: str) -> bool:
+    """Check if question matches smart alert keywords (Gold, Fed, Ceasefire, etc.)."""
+    q_lower = question.lower()
+    return any(kw.lower() in q_lower for kw in config.SMART_ALERT_KEYWORDS)
+
+
 def find_new_markets() -> List[MarketAlert]:
     """Find markets we haven't seen before."""
     all_markets = fetch_fresh_markets()
@@ -206,15 +212,28 @@ def find_new_markets() -> List[MarketAlert]:
         if is_market_seen(market_id):
             continue
 
-        # Apply volume filter
+        # Apply volume filter (> $20,000 to filter noise)
         if config.ALERT_VOLUME_THRESHOLD > 0 and market['volume'] < config.ALERT_VOLUME_THRESHOLD:
             continue
 
         # Categorize
         category = _categorize_market(market['question'], '')
 
-        # Only alert for relevant categories
-        if category in ('fed', 'inflation', 'gold', 'employment', 'economy'):
+        # Priority 1: Smart Alert Keywords (Gold, Fed, Ceasefire, etc.) - ALWAYS alert
+        if _matches_smart_alert_keywords(market['question']):
+            new_alerts.append(MarketAlert(
+                market_id=market_id,
+                question=market['question'],
+                question_th=market['question_th'],
+                outcomes=market['outcomes'],
+                volume=market['volume'],
+                url=market['url'],
+                category=category,
+            ))
+            continue
+
+        # Priority 2: Only alert for priority categories (hide politics/economy noise)
+        if category in config.PRIORITY_CATEGORIES:
             new_alerts.append(MarketAlert(
                 market_id=market_id,
                 question=market['question'],

@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 
 import config
 import alert_monitor
+import gold_sentiment
 import price_monitor
 
 # Load env vars
@@ -477,21 +478,38 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
         prices = price_monitor.get_current_prices()
         price_line = price_monitor.format_price_line(prices)
 
+    # Calculate Gold Sentiment Score
+    market_dicts = [
+        {
+            'question': p.question,
+            'outcomes': p.outcomes,
+            'category': p.category,
+        }
+        for p in predictions
+    ]
+    sentiment = gold_sentiment.calculate_gold_sentiment(market_dicts)
+    sentiment_msg = gold_sentiment.format_sentiment_message(sentiment)
+
     message = "🎯 <b>ตลาดคาดการณ์อะไรอยู่? (Polymarket)</b>\n"
 
     if price_line:
         message += f"{price_line}\n"
 
+    # Add Gold Sentiment Score
+    message += f"\n{sentiment_msg}\n"
+
     message += (
-        f"{'─' * 30}\n"
+        f"\n{'─' * 30}\n"
         "<i>ตัวเลข % = ความน่าจะเป็นที่ตลาดคาดการณ์</i>\n"
         "<i>🟢 = มีโอกาสสูง | 🟡 = เป็นไปได้ | 🔴 = โอกาสน้อย</i>\n\n"
     )
 
     by_category = get_predictions_by_category(predictions)
-    category_order = ['fed', 'gold', 'inflation', 'employment', 'oil', 'geopolitics', 'politics', 'economy']
+    # Filter: Show only priority categories (Fed, Gold, Inflation, Geopolitics)
+    # Hide: politics, economy, employment noise
+    priority_categories = ['fed', 'gold', 'inflation', 'geopolitics']
 
-    for category in category_order:
+    for category in priority_categories:
         if category not in by_category:
             continue
 
