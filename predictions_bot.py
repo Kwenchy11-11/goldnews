@@ -187,7 +187,13 @@ EXCLUDE_KEYWORDS = [
     'ukraine election', 'russia election', 'netanyahu',
     # Other noise
     'brentford',  # Football team, not Brent crude
+    # Financial institutions (not gold price)
+    'goldman', 'goldman sachs', 'jp morgan', 'morgan stanley',
 ]
+
+# Dead market threshold - filter out one-sided markets where one outcome dominates
+# If any outcome has >= 95% probability, the market is "dead" (no real competition)
+DEAD_MARKET_THRESHOLD = 0.95  # 95% - markets with any outcome >= 95% are dead
 
 
 def _categorize_market(question: str, description: str = '') -> str:
@@ -208,28 +214,65 @@ def _categorize_market(question: str, description: str = '') -> str:
 
 
 def _translate_question(question: str, category: str) -> str:
-    """Provide a Thai translation/explanation for the market question."""
+    """
+    Smart Thai translation that preserves numbers and price targets.
+    
+    Examples:
+    - "Will Gold hit $4,600 in April?" → "ทองคำจะแตะ $4,600 ในเดือนเมษายนหรือไม่?"
+    - "No Fed rate cuts in 2026?" → "เฟดจะไม่ลดดอกเบี้ยเลยในปี 2026?"
+    - "GDP QoQ > 2.5%?" → "GDP ไตรมาสต่อไตรมาสโต > 2.5% หรือไม่?"
+    """
     q_lower = question.lower()
 
     # Extract numbers and years for context
     import re
-    numbers = re.findall(r'\d+', question)
     year_match = re.search(r'\b(20\d{2})\b', question)
-    year_str = f" ปี {year_match.group(1)}" if year_match else ""
+    year_str = f"ในปี {year_match.group(1)}" if year_match else ""
+
+    # Extract dollar amounts
+    dollar_match = re.search(r'\$([\d,]+(?:\.\d+)?)', question)
+    dollar_str = f"${dollar_match.group(1)}" if dollar_match else None
+
+    # Extract percentage
+    pct_match = re.search(r'([\d.]+)%', question)
+    pct_str = f"{pct_match.group(1)}%" if pct_match else None
+
+    # Extract month names
+    month_map = {
+        'january': 'มกราคม', 'february': 'กุมภาพันธ์', 'march': 'มีนาคม',
+        'april': 'เมษายน', 'may': 'พฤษภาคม', 'june': 'มิถุนายน',
+        'july': 'กรกฎาคม', 'august': 'สิงหาคม', 'september': 'กันยายน',
+        'october': 'ตุลาคม', 'november': 'พฤศจิกายน', 'december': 'ธันวาคม',
+    }
+    month_str = ''
+    for eng, thai in month_map.items():
+        if eng in q_lower:
+            month_str = f'ในเดือน{thai}'
+            break
 
     # Fed rate decisions
     if 'fed rate' in q_lower or 'federal reserve' in q_lower or 'the fed ' in q_lower or 'fomc' in q_lower:
-        # Number of rate cuts
-        cuts_match = re.search(r'(\d+\s*(?:or\s*more\s*)?)\s*fed\s*rate\s*cuts?', q_lower)
+        # Number of rate cuts - handle both patterns:
+        # "3 or more fed rate cuts" and "cut rates 3 or more times"
+        cuts_match = re.search(r'(\d+)\s*(?:or\s*more\s*)?\s*fed\s*rate\s*cuts?', q_lower)
+        cuts_match2 = re.search(r'(?:fed\s+)?cut\s+rates?\s+(\d+)\s*(?:or\s*more)?\s*times?', q_lower)
         no_cuts_match = re.search(r'no\s+fed\s*rate\s*cuts?', q_lower)
+        will_cut_match = re.search(r'will\s+the\s+fed\s+cut', q_lower)
 
         if no_cuts_match:
             return f'เฟดจะไม่ลดดอกเบี้ยเลย{year_str}?'
         if cuts_match:
-            num = cuts_match.group(1).strip()
-            # Clean up "or more" to Thai
-            num = num.replace('or more', 'ขึ้นไป').replace('  ', ' ')
-            return f'เฟดจะลดดอกเบี้ย {num} ครั้ง{year_str}?'
+            num = cuts_match.group(1)
+            or_more = 'or more' in q_lower
+            more_str = 'ครั้งขึ้นไป' if or_more else 'ครั้ง'
+            return f'เฟดจะลดดอกเบี้ย {num} {more_str}{year_str}?'
+        if cuts_match2:
+            num = cuts_match2.group(1)
+            or_more = 'or more' in q_lower
+            more_str = 'ครั้งขึ้นไป' if or_more else 'ครั้ง'
+            return f'เฟดจะลดดอกเบี้ย {num} {more_str}{year_str}?'
+        if will_cut_match:
+            return f'เฟดจะลดดอกเบี้ย{year_str}?'
 
         if 'raise' in q_lower or 'increase' in q_lower or 'hike' in q_lower:
             return f'เฟดจะขึ้นดอกเบี้ย{year_str}?'
@@ -241,32 +284,63 @@ def _translate_question(question: str, category: str) -> str:
 
     # Gold price targets
     if 'gold' in q_lower:
-        if 'above' in q_lower:
-            match = re.search(r'\$?([\d,]+)', question)
-            price = match.group(1) if match else '?'
-            return f'ราคาทองจะเกิน ${price} หรือไม่?'
-        if 'below' in q_lower:
-            match = re.search(r'\$?([\d,]+)', question)
-            price = match.group(1) if match else '?'
-            return f'ราคาทองจะต่ำกว่า ${price} หรือไม่?'
+        price = dollar_str or '?'
+        if 'hit' in q_lower or 'reach' in q_lower or 'above' in q_lower:
+            return f'ทองคำจะแตะ {price}{month_str}{year_str}หรือไม่?'
+        if 'below' in q_lower or 'under' in q_lower:
+            return f'ทองคำจะต่ำกว่า {price}{month_str}{year_str}หรือไม่?'
+        if 'end' in q_lower or 'close' in q_lower or 'finish' in q_lower:
+            return f'ทองคำจะปิดที่ {price}{month_str}{year_str}หรือไม่?'
+        if 'at' in q_lower and dollar_str:
+            return f'ทองคำจะอยู่ที่ {price}{month_str}{year_str}หรือไม่?'
+        if 'to ' in q_lower and dollar_str:
+            return f'ทองคำจะไปถึง {price}{year_str}หรือไม่?'
+        # Fallback with price if found
+        if dollar_str:
+            return f'ทองคำที่ระดับ {price}{year_str}จะเป็นอย่างไร?'
         return 'คาดการณ์ราคาทองคำ'
 
-    # Inflation
-    if 'inflation' in q_lower or 'cpi' in q_lower:
-        return 'คาดการณ์เงินเฟ้อ (CPI)'
+    # Inflation / CPI
+    if 'cpi' in q_lower:
+        if 'above' in q_lower or '>' in question:
+            return f'CPI จะเกิน {pct_str or "?"}{year_str}หรือไม่?'
+        if 'below' in q_lower or '<' in question:
+            return f'CPI จะต่ำกว่า {pct_str or "?"}{year_str}หรือไม่?'
+        return f'คาดการณ์เงินเฟ้อ (CPI){year_str}'
 
-    # Employment
-    if 'job' in q_lower or 'employment' in q_lower or 'unemployment' in q_lower:
-        return 'คาดการณ์การจ้างงาน'
+    if 'inflation' in q_lower:
+        if 'above' in q_lower or '>' in question:
+            return f'เงินเฟ้อจะเกิน {pct_str or "?"}{year_str}หรือไม่?'
+        return f'คาดการณ์เงินเฟ้อ{year_str}'
 
     # GDP
     if 'gdp' in q_lower:
-        return 'คาดการณ์ GDP (ผลิตภัณฑ์มวลรวม)'
+        if '>' in question or 'above' in q_lower or 'greater' in q_lower:
+            return f'GDP จะโตเกิน {pct_str or "?"}{year_str}หรือไม่?'
+        if '<' in question or 'below' in q_lower or 'negative' in q_lower:
+            return f'GDP จะติดลบหรือต่ำกว่า {pct_str or "?"}{year_str}หรือไม่?'
+        return f'คาดการณ์ GDP{year_str}'
 
     # Recession
     if 'recession' in q_lower:
         return f'เศรษฐกิจสหรัฐฯ จะเข้าสู่ภาวะถดถอย{year_str}?'
 
+    # Employment / Jobs
+    if 'job' in q_lower or 'employment' in q_lower or 'unemployment' in q_lower:
+        if 'rate' in q_lower and pct_str:
+            return f'อัตราการว่างงานจะเกิน {pct_str}หรือไม่?'
+        return f'คาดการณ์การจ้างงาน{year_str}'
+
+    # Oil
+    if 'oil' in q_lower or 'crude' in q_lower or 'wti' in q_lower:
+        price = dollar_str or '?'
+        if 'above' in q_lower or '>' in question:
+            return f'ราคาน้ำมันจะเกิน {price}หรือไม่?'
+        if 'below' in q_lower or '<' in question:
+            return f'ราคาน้ำมันจะต่ำกว่า {price}หรือไม่?'
+        return f'คาดการณ์ราคาน้ำมัน{year_str}'
+
+    # Fallback - return original question
     return question
 
 
@@ -462,6 +536,12 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
             if not outcomes:
                 continue
 
+            # Filter out dead markets - if any outcome >= 95%, market is one-sided (dead)
+            max_prob = max(o['price'] for o in outcomes)
+            if max_prob >= DEAD_MARKET_THRESHOLD:
+                logger.debug(f"Skipping dead market (max prob {max_prob:.0%}): {question}")
+                continue
+
             slug = market.get('slug', '')
             url = f"https://polymarket.com/event/{slug}" if slug else ''
             question_th = _translate_question(question, category)
@@ -623,8 +703,8 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
 
         for market in cat_markets:
             outcomes_str = _format_outcomes_detailed(market)
-            # Show original English question (with numbers) instead of Thai translation
-            message += f"• {market.question}\n"
+            # Show smart Thai translation with numbers preserved
+            message += f"• {market.question_th}\n"
             message += f"{outcomes_str}\n"
 
         message += "\n"
@@ -665,15 +745,15 @@ def _format_outcomes(outcomes: list, category: str) -> str:
 
 def _format_outcomes_detailed(market: PredictionMarket) -> str:
     """
-    Format outcomes showing the original outcome names.
+    Format outcomes with Thai labels for Yes/No, original names for others.
     
-    For Yes/No markets: show Yes/No with the original question providing context.
+    For Yes/No markets: show ใช่/ไม่ใช่ (the Thai question provides context).
     For named outcomes (e.g., "$2500", "$2600"): show the outcome name directly.
     
     Example:
-    • Will Gold hit $4,600 in April?
-      🟢 Yes: 20%
-      🔴 No: 80%
+    • ทองคำจะแตะ $4,600 ในเดือนเมษายนหรือไม่?
+      🟢 ใช่: 20%
+      🔴 ไม่ใช่: 80%
     """
     lines = []
     
@@ -684,11 +764,11 @@ def _format_outcomes_detailed(market: PredictionMarket) -> str:
         
         name_lower = name.lower()
         
-        # Keep Yes/No as-is (the question provides context)
+        # Translate Yes/No to Thai
         if name_lower in ('yes', 'true', 'yes '):
-            label = 'Yes'
+            label = 'ใช่'
         elif name_lower in ('no', 'false', 'no '):
-            label = 'No'
+            label = 'ไม่ใช่'
         else:
             # For named outcomes (price levels, rate decisions, etc.), show original name
             label = name
