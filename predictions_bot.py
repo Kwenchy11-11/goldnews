@@ -505,9 +505,9 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
     )
 
     by_category = get_predictions_by_category(predictions)
-    # Filter: Show only priority categories (Fed, Gold, Inflation, Geopolitics)
-    # Hide: politics, economy, employment noise
-    priority_categories = ['fed', 'gold', 'inflation', 'geopolitics']
+    # Filter: Show only high-impact categories for trading
+    # Fed decisions and Gold targets are most important for XAU/USD
+    priority_categories = ['fed', 'gold', 'inflation']
 
     for category in priority_categories:
         if category not in by_category:
@@ -521,9 +521,30 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
         message += f"{cat_emoji} <b>{cat_label}</b>\n"
 
         for market in cat_markets:
-            outcomes_str = _format_outcomes(market.outcomes, market.category)
+            outcomes_str = _format_outcomes_detailed(market)
             message += f"• {market.question_th}\n"
             message += f"{outcomes_str}\n"
+
+        message += "\n"
+
+    # Risk Factors section - Oil and Geopolitics (high impact on gold)
+    risk_categories = ['geopolitics']
+    has_risk = any(cat in by_category for cat in risk_categories)
+
+    if has_risk:
+        message += "⚠️ <b>ปัจจัยเสี่ยง (Risk Factors)</b>\n"
+        message += "<i>เหตุการณ์เหล่านี้กระทบทองคำแรงมาก</i>\n\n"
+
+        for category in risk_categories:
+            if category not in by_category:
+                continue
+
+            cat_markets = by_category[category][:2]  # Show max 2 risk markets
+
+            for market in cat_markets:
+                outcomes_str = _format_outcomes_detailed(market)
+                message += f"• {market.question_th}\n"
+                message += f"{outcomes_str}\n"
 
         message += "\n"
 
@@ -559,6 +580,137 @@ def _format_outcomes(outcomes: list, category: str) -> str:
         lines.append(f"  {indicator} {name_th}: {pct:.0f}%")
 
     return '\n'.join(lines)
+
+
+def _format_outcomes_detailed(market: PredictionMarket) -> str:
+    """
+    Format outcomes with FULL context showing what the question is asking.
+    
+    Instead of just showing "Yes: 49%", show:
+    "Will NOT cut rates: 🟡 49% | Will cut: 🟡 51%"
+    
+    This fixes the "Data ขยะ" issue where users couldn't understand
+    what "คาดการณ์ GDP ใช่ 6%" actually meant.
+    """
+    lines = []
+    question = market.question.lower()
+    category = market.category
+    
+    # Extract the condition from the question for context
+    condition = _extract_condition_from_question(question)
+    
+    for outcome in market.outcomes[:2]:  # Show top 2 outcomes
+        name = outcome.get('name', '')
+        price = outcome.get('price', 0)
+        pct = price * 100
+        
+        name_lower = name.lower()
+        
+        # Determine what this outcome means in context
+        if name_lower in ('yes', 'true', 'yes '):
+            # For "Yes", extract what condition means yes
+            label = condition if condition else 'ใช่'
+        elif name_lower in ('no', 'false', 'no '):
+            # For "No", show the opposite
+            label = _get_opposite_condition(condition) if condition else 'ไม่ใช่'
+        else:
+            # For named outcomes (Raise/Cut/Above/Below), translate directly
+            label = _translate_outcome_name(name, category)
+        
+        # Add indicator based on probability
+        if pct >= 60:
+            indicator = '🟢'
+        elif pct >= 40:
+            indicator = '🟡'
+        else:
+            indicator = '🔴'
+        
+        lines.append(f"  {indicator} {label}: {pct:.0f}%")
+    
+    return '\n'.join(lines)
+
+
+def _extract_condition_from_question(question: str) -> str:
+    """
+    Extract what the question is asking from the market question.
+    
+    Examples:
+    - "GDP QoQ > 2.5%?" → "> 2.5%"
+    - "No Fed rate cuts in 2026?" → "ไม่ลดดอกเบี้ย"
+    - "Will gold hit $3200?" → "ทะลุ $3200"
+    """
+    import re
+    q_lower = question.lower()
+    
+    # GDP conditions
+    gdp_match = re.search(r'gdp.*?(above|>|greater than)\s*([\d.]+)%?', q_lower)
+    if gdp_match:
+        threshold = gdp_match.group(2)
+        return f"โต > {threshold}%"
+    
+    gdp_negative = re.search(r'gdp.*?(negative|negative growth|recession)', q_lower)
+    if gdp_negative:
+        return "ติดลบ"
+    
+    # Fed rate decisions
+    no_cuts = re.search(r'no\s+fed\s*rate\s*cuts?', q_lower)
+    if no_cuts:
+        return "ไม่ลดดอกเบี้ย"
+    
+    cuts_match = re.search(r'(\d+)\s+fed\s*rate\s*cuts?', q_lower)
+    if cuts_match:
+        num = cuts_match.group(1)
+        return f"ลด {num} ครั้ง"
+    
+    rate_decision = re.search(r'fed\s*(raise|hike|increase).*?rate', q_lower)
+    if rate_decision:
+        return "ขึ้นดอกเบี้ย"
+    
+    rate_cut = re.search(r'fed\s*(cut|decrease|reduce).*?rate', q_lower)
+    if rate_cut:
+        return "ลดดอกเบี้ย"
+    
+    # Gold price targets
+    gold_above = re.search(r'gold.*?((?:above|above \$|hit \$|reach \$)\s*[\d,]+)', q_lower)
+    if gold_above:
+        price = gold_above.group(1).replace('above', '').replace('$', '').strip()
+        return f"ทะลุ ${price}"
+    
+    gold_below = re.search(r'gold.*?((?:below|below \$|under \$)\s*[\d,]+)', q_lower)
+    if gold_below:
+        price = gold_below.group(1).replace('below', '').replace('$', '').strip()
+        return f"ต่ำกว่า ${price}"
+    
+    # Recession
+    recession = re.search(r'(recession|ถดถอย)', q_lower)
+    if recession:
+        return "ถดถอย"
+    
+    # Default - return empty if can't extract
+    return ""
+
+
+def _get_opposite_condition(condition: str) -> str:
+    """Get the opposite condition for 'No' outcomes."""
+    if not condition:
+        return "ไม่ใช่"
+    
+    opposites = {
+        'โต > ': 'โต ≤ ',
+        'ติดลบ': 'ไม่ติดลบ',
+        'ไม่ลดดอกเบี้ย': 'ลดดอกเบี้ย',
+        'ขึ้นดอกเบี้ย': 'ไม่ขึ้นดอกเบี้ย',
+        'ลดดอกเบี้ย': 'ไม่ลดดอกเบี้ย',
+        'ทะลุ ': 'ไม่ทะลุ ',
+        'ต่ำกว่า ': 'สูงกว่า ',
+        'ถดถอย': 'ไม่ถดถอย',
+    }
+    
+    for key, opposite in opposites.items():
+        if key in condition:
+            return condition.replace(key, opposite)
+    
+    return f"ไม่{condition}"
 
 
 def handle_predictions_command(chat_id: int) -> bool:

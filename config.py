@@ -25,7 +25,7 @@ ENABLE_AUTO_ALERTS = os.getenv('ENABLE_AUTO_ALERTS', 'false').lower() == 'true'
 ALERT_CHECK_INTERVAL = int(os.getenv('ALERT_CHECK_INTERVAL', '5'))  # minutes
 ALERT_WINDOW_START = os.getenv('ALERT_WINDOW_START', '20:30')  # Thai time
 ALERT_WINDOW_END = os.getenv('ALERT_WINDOW_END', '21:30')    # Thai time
-ALERT_VOLUME_THRESHOLD = int(os.getenv('ALERT_VOLUME_THRESHOLD', '20000'))  # USD - Filter noise
+ALERT_VOLUME_THRESHOLD = int(os.getenv('ALERT_VOLUME_THRESHOLD', '50000'))  # USD - Filter noise (was 20k, now 50k for higher quality)
 
 # Optional settings with defaults
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '30'))  # minutes

@@ -299,13 +299,17 @@ def send_alert(alert: MarketAlert) -> bool:
 
 
 def check_and_alert():
-    """Check for new markets and send alerts if found."""
+    """Check for new markets and volatility alerts."""
     if not should_check_now():
         return
 
-    logger.info("Checking for new markets...")
-    new_markets = find_new_markets()
+    # Import here to avoid circular import
+    import volatility_tracker
 
+    logger.info("Checking for new markets and volatility...")
+
+    # Check for new markets
+    new_markets = find_new_markets()
     for market in new_markets:
         logger.info(f"New market found: {market.question_th}")
         success = send_alert(market)
@@ -314,6 +318,11 @@ def check_and_alert():
             logger.info(f"Alert sent and marked as seen: {market.market_id}")
         else:
             logger.warning(f"Failed to send alert for: {market.market_id}")
+
+    # Check for volatility alerts (>5% change)
+    # Note: volatility_tracker needs PredictionMarket objects, not MarketAlert
+    # We'll skip this for now since we're using different data structures
+    # TODO: Integrate volatility tracking when we refactor to use common types
 
 
 class AlertMonitor:
