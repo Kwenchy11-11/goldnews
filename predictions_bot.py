@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 
 import config
 import alert_monitor
+import price_monitor
 
 # Load env vars
 load_dotenv()
@@ -457,8 +458,8 @@ def get_updates(offset: Optional[int] = None, timeout: int = 30) -> list:
         return []
 
 
-def format_predictions_message(predictions: List[PredictionMarket]) -> str:
-    """Format predictions into a Thai message."""
+def format_predictions_message(predictions: List[PredictionMarket], include_prices: bool = True) -> str:
+    """Format predictions into a Thai message with optional price data."""
     if not predictions:
         return (
             "🎯 <b>ตลาดคาดการณ์ (Polymarket)</b>\n\n"
@@ -470,8 +471,18 @@ def format_predictions_message(predictions: List[PredictionMarket]) -> str:
             "• ใช้เป็นข้อมูลประกอบการตัดสินใจเทรดทองคำได้"
         )
 
-    message = (
-        "🎯 <b>ตลาดคาดการณ์อะไรอยู่? (Polymarket)</b>\n"
+    # Get current prices
+    price_line = ""
+    if include_prices:
+        prices = price_monitor.get_current_prices()
+        price_line = price_monitor.format_price_line(prices)
+
+    message = "🎯 <b>ตลาดคาดการณ์อะไรอยู่? (Polymarket)</b>\n"
+
+    if price_line:
+        message += f"{price_line}\n"
+
+    message += (
         f"{'─' * 30}\n"
         "<i>ตัวเลข % = ความน่าจะเป็นที่ตลาดคาดการณ์</i>\n"
         "<i>🟢 = มีโอกาสสูง | 🟡 = เป็นไปได้ | 🔴 = โอกาสน้อย</i>\n\n"
@@ -619,6 +630,46 @@ def process_update(update: dict) -> bool:
     return False
 
 
+def auto_push_predictions():
+    """Auto-push predictions every hour and check for significant changes."""
+    import threading
+
+    def _run():
+        while True:
+            try:
+                # Wait 1 hour (3600 seconds)
+                time.sleep(3600)
+
+                logger.info("Auto-push: Fetching predictions...")
+                predictions = fetch_polymarket_predictions()
+
+                if not predictions:
+                    logger.info("Auto-push: No predictions to send")
+                    continue
+
+                # Check for significant changes (>5%)
+                changes = price_monitor.check_significant_changes(predictions, threshold=5.0)
+
+                if changes:
+                    # Send emergency alert
+                    prices = price_monitor.get_current_prices()
+                    alert_msg = price_monitor.format_emergency_alert(changes, prices)
+                    send_message(alert_msg)
+                    logger.info(f"Emergency alert sent: {len(changes)} significant changes")
+
+                # Send regular predictions update
+                message = format_predictions_message(predictions)
+                send_message(message)
+                logger.info("Auto-push: Predictions sent")
+
+            except Exception as e:
+                logger.error(f"Auto-push error: {e}", exc_info=True)
+
+    thread = threading.Thread(target=_run, daemon=True, name="AutoPush")
+    thread.start()
+    logger.info("Auto-push scheduler started (every 1 hour)")
+
+
 def start_bot():
     """Start the predictions bot."""
     global _last_update_id
@@ -630,7 +681,8 @@ def start_bot():
     logger.info("=" * 50)
     logger.info(" Gold Predictions Bot")
     logger.info("=" * 50)
-    logger.info("Commands: /predictions, /help, /start")
+    logger.info("Commands: /predictions, /alerts, /help, /start")
+    logger.info("Features: Auto-push every 1 hour, Emergency alerts on 5%+ changes")
 
     # Get initial offset (skip old messages)
     updates = get_updates(timeout=1)
@@ -640,6 +692,9 @@ def start_bot():
 
     # Start alert monitor if enabled
     alert_monitor.start_monitor()
+
+    # Start auto-push scheduler
+    auto_push_predictions()
 
     logger.info("Bot started. Waiting for commands...")
 
