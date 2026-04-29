@@ -25,6 +25,7 @@ logger = logging.getLogger('goldnews')
 @dataclass
 class PredictionMarket:
     """A single prediction market from Polymarket."""
+    market_id: str          # Unique market ID for dedup
     question: str           # e.g., "Will the Fed raise rates in May 2026?"
     question_th: str        # Thai translation/explanation
     outcomes: List[Dict]    # [{name: "Yes", price: 0.75}, {name: "No", price: 0.25}]
@@ -216,22 +217,30 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
     that affect gold prices. Returns a list of PredictionMarket objects
     with Thai translations and beginner-friendly explanations.
 
-    Tries both the markets API and events API (with economics tag).
+    Uses ID-based deduplication to avoid duplicates.
     """
-    # Keywords for markets that affect gold prices
+    # Keywords for markets that affect gold prices - expanded list
     relevant_keywords = [
         # Gold
         'gold price', 'gold above', 'gold below', 'gold at', 'gold hit',
-        'gold reach', 'gold end', 'gold close', 'gold finish', 'xauusd',
+        'gold reach', 'gold end', 'gold close', 'gold finish', 'gold xau',
+        'gold to ', 'gold will', 'gold by ', 'xauusd', 'ounce of gold',
         # Fed
         'fed rate', 'federal reserve', 'interest rate', 'fed fund',
-        'the fed ', 'fed raise', 'fed cut', 'fed hold',
+        'the fed ', 'fed raise', 'fed cut', 'fed hold', 'federal funds',
+        'fed meeting', 'monetary policy', 'powell',
         # Inflation
-        'inflation', 'cpi', 'consumer price',
+        'inflation', 'cpi', 'ppi', 'consumer price', 'producer price',
+        'core inflation', 'headline inflation', 'price index',
         # Employment
-        'nonfarm', 'unemployment', 'jobless', 'payroll',
+        'nonfarm', 'unemployment', 'jobless', 'payroll', 'non-farm',
+        'labor market', 'jobs report', 'employment rate',
         # Economy
-        'gdp', 'recession', 'economic growth',
+        'gdp', 'recession', 'economic growth', 'gdp growth', 'economy',
+        'consumer spending', 'retail sales', 'housing market',
+        'manufacturing', 'industrial production', 'trade deficit',
+        # Treasury/Yield
+        'treasury', 'yield', 'bond', '10-year',
     ]
 
     # Exclude irrelevant markets
@@ -240,16 +249,20 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
         'basketball', 'baseball', 'stanley cup', 'super bowl',
         'olympics', 'world cup', 'championship', 'election',
         'president', 'senate', 'congress', 'governor', 'trump',
-        'biden', 'crypto', 'bitcoin', 'ethereum',
+        'biden', 'crypto', 'bitcoin', 'ethereum', 'solana', 'dogecoin',
+        'weather', 'temperature', 'hurricane', 'storm', 'snow',
+        'entertainment', 'movie', 'oscar', 'grammy', 'award',
+        'sports', 'game', 'match', 'win', 'lose', 'score',
+        'vegas', 'atlanta', 'los angeles', 'new york',
     ]
 
     markets_data = []
 
-    # Try markets API
+    # Try markets API with higher limit
     try:
         response = requests.get(
             config.POLYMARKET_URL,
-            params={'active': 'true', 'closed': 'false', 'limit': '200'},
+            params={'active': 'true', 'closed': 'false', 'limit': '500'},
             timeout=15,
             headers={'Accept': 'application/json'}
         )
@@ -257,6 +270,7 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
         data = response.json()
         market_list = data.get('markets', data) if isinstance(data, dict) else data
         markets_data.extend(market_list)
+        logger.info(f"Markets API returned {len(market_list)} markets")
     except Exception as e:
         logger.warning(f"Failed to fetch Polymarket markets: {e}")
 
@@ -264,17 +278,19 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
     try:
         response = requests.get(
             'https://gamma-api.polymarket.com/events',
-            params={'active': 'true', 'closed': 'false', 'limit': '50', 'tag': 'economics'},
+            params={'active': 'true', 'closed': 'false', 'limit': '100', 'tag': 'economics'},
             timeout=15,
             headers={'Accept': 'application/json'}
         )
         response.raise_for_status()
         events_data = response.json()
         if isinstance(events_data, list):
+            event_markets = []
             for event in events_data:
-                # Each event may have nested markets
                 for market in event.get('markets', []):
-                    markets_data.append(market)
+                    event_markets.append(market)
+            markets_data.extend(event_markets)
+            logger.info(f"Events API returned {len(event_markets)} markets")
     except Exception as e:
         logger.warning(f"Failed to fetch Polymarket events: {e}")
 
@@ -283,14 +299,19 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
         return []
 
     markets = []
-    seen_questions = set()
+    seen_ids = set()  # ID-based deduplication
 
     for market in markets_data:
         try:
-            question = market.get('question', '')
-            if not question or question in seen_questions:
+            # Get unique market ID (slug or question hash as fallback)
+            market_id = market.get('id', '') or market.get('slug', '') or hash(market.get('question', ''))
+            if not market_id or market_id in seen_ids:
                 continue
-            seen_questions.add(question)
+            seen_ids.add(market_id)
+
+            question = market.get('question', '')
+            if not question:
+                continue
 
             description = market.get('description', '') or ''
             question_lower = question.lower()
@@ -350,6 +371,7 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
             explanation_th = cat_info.get('explanation', '')
 
             markets.append(PredictionMarket(
+                market_id=str(market_id),
                 question=question,
                 question_th=question_th,
                 outcomes=outcomes,
@@ -366,7 +388,7 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
     # Sort by volume (most popular first)
     markets.sort(key=lambda m: m.volume, reverse=True)
 
-    logger.info(f"Fetched {len(markets)} Polymarket prediction markets")
+    logger.info(f"Fetched {len(markets)} Polymarket prediction markets (from {len(markets_data)} total)")
     return markets
 
 

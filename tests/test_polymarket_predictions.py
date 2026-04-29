@@ -192,21 +192,58 @@ class TestFetchPolymarketPredictions(unittest.TestCase):
 
         self.assertEqual(results, [])
 
+    @patch('polymarket_predictions.requests.get')
+    def test_id_based_dedup(self, mock_get):
+        """Test that markets are deduplicated by ID, not just question."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'markets': [
+                {
+                    'id': 'market-123',
+                    'question': 'Will gold be above $3000?',
+                    'description': 'Gold price',
+                    'outcomes': ['Yes', 'No'],
+                    'outcome_prices': ['0.6', '0.4'],
+                    'volume': 1000000,
+                    'slug': 'gold-above-3000',
+                },
+                {
+                    'id': 'market-123',  # Same ID - should be deduped
+                    'question': 'Will gold be above $3000?',  # Same question
+                    'description': 'Gold price',
+                    'outcomes': ['Yes', 'No'],
+                    'outcome_prices': ['0.6', '0.4'],
+                    'volume': 1000000,
+                    'slug': 'gold-above-3000-2',
+                },
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        results = fetch_polymarket_predictions()
+
+        # Should only have 1 market (deduped by ID)
+        self.assertEqual(len(results), 1)
+
 
 class TestGetPredictionsByCategory(unittest.TestCase):
     def test_group_by_category(self):
         markets = [
             PredictionMarket(
+                market_id="fed_raise_1",
                 question="Fed raise?", question_th="เฟดขึ้นดอกเบี้ย?",
                 outcomes=[{'name': 'Yes', 'price': 0.25}],
                 volume=1000, url='', category='fed', explanation_th=''
             ),
             PredictionMarket(
+                market_id="gold_above_3000",
                 question="Gold above $3000?", question_th="ทองเกิน $3000?",
                 outcomes=[{'name': 'Yes', 'price': 0.65}],
                 volume=2000, url='', category='gold', explanation_th=''
             ),
             PredictionMarket(
+                market_id="fed_cut_1",
                 question="Fed cut?", question_th="เฟดลดดอกเบี้ย?",
                 outcomes=[{'name': 'Yes', 'price': 0.10}],
                 volume=500, url='', category='fed', explanation_th=''
