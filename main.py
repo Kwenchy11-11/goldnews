@@ -86,17 +86,17 @@ def main():
     logger.info("Starting continuous mode...")
     logger.info("Commands available: /predictions, /news, /status, /help")
 
-    # Start command handler in a separate thread
-    cmd_thread = threading.Thread(
-        target=command_handler.start_command_handler,
+    # Start scheduler in a separate thread
+    scheduler_thread = threading.Thread(
+        target=scheduler.start_scheduler,
         daemon=True,
-        name="CommandHandler"
+        name="Scheduler"
     )
-    cmd_thread.start()
-    logger.info("Command handler started (background thread)")
+    scheduler_thread.start()
+    logger.info("Scheduler started (background thread)")
 
-    # Run scheduler in main thread
-    scheduler.start_scheduler()
+    # Run command handler in main thread (keeps process alive)
+    command_handler.start_command_handler()
 
 
 if __name__ == "__main__":
