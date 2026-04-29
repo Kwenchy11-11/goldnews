@@ -57,18 +57,15 @@ def format_event_time(event) -> str:
     """
     Format event date/time for display (event_datetime is already in ICT).
 
-    Returns full Thai date string like:
-    - "วันนี้ เวลา 08:30 น." for today's events
-    - "พรุ่งนี้ เวลา 01:00 น." for tomorrow's events
-    - "พฤหัสบดีที่ 30 เมษายน 2569 เวลา 19:30 น." for events further out
+    Always shows full Thai date to avoid confusion:
+    - "พฤหัสบดีที่ 30 เมษายน 2569 เวลา 01:00 น."
+    - "ศุกร์ที่ 1 พฤษภาคม 2569 เวลา 19:30 น."
     - "เวลาไม่ระบุ" if no time available
     """
     if not event.event_datetime:
         return "เวลาไม่ระบุ"
 
-    now = get_now_ict()
     event_dt = event.event_datetime
-    day_diff = (event_dt.date() - now.date()).days
 
     thai_days = {
         0: 'จันทร์', 1: 'อังคาร', 2: 'พุธ',
@@ -85,14 +82,7 @@ def format_event_time(event) -> str:
     month_thai = thai_months.get(event_dt.month, str(event_dt.month))
     year_be = event_dt.year + 543  # Buddhist year
 
-    if day_diff == 0:
-        return f"วันนี้ เวลา {time_str} น."
-    elif day_diff == 1:
-        return f"พรุ่งนี้ เวลา {time_str} น."
-    elif day_diff == -1:
-        return f"เมื่อวาน เวลา {time_str} น."
-    else:
-        return f"{day_name}ที่ {event_dt.day} {month_thai} {year_be} เวลา {time_str} น."
+    return f"{day_name}ที่ {event_dt.day} {month_thai} {year_be} เวลา {time_str} น."
 
 
 def format_date_range(analyses: List[AnalysisResult], now: datetime) -> str:
