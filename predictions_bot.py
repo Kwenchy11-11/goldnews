@@ -58,7 +58,7 @@ class PredictionMarket:
 
 CATEGORY_INFO = {
     'fed': {
-        'label_th': '🏦 Fed & Interest Rates',
+        'label_th': 'Fed & Interest Rates',
         'emoji': '🏦',
         'explanation': (
             'คณะกรรมการนโยบายการเงินของสหรัฐฯ (Fed) จะตัดสินใจเรื่องดอกเบี้ย\n'
@@ -68,7 +68,7 @@ CATEGORY_INFO = {
         ),
     },
     'inflation': {
-        'label_th': '💰 Inflation (CPI/PPI)',
+        'label_th': 'Inflation (CPI/PPI)',
         'emoji': '💰',
         'explanation': (
             'เงินเฟ้อคือภาวะที่สินค้าแพงขึ้นเรื่อยๆ\n'
@@ -78,7 +78,7 @@ CATEGORY_INFO = {
         ),
     },
     'gold': {
-        'label_th': '🥇 Gold Price Targets',
+        'label_th': 'Gold Price Targets',
         'emoji': '🥇',
         'explanation': (
             'ตลาดคาดการณ์ราคาทองคำว่าจะไปถึงระดับไหน\n'
@@ -88,7 +88,7 @@ CATEGORY_INFO = {
         ),
     },
     'risk_factors': {
-        'label_th': '🔥 Risk Factors (War/Oil)',
+        'label_th': 'Risk Factors (War/Oil)',
         'emoji': '🔥',
         'explanation': (
             'ปัจจัยเสี่ยงที่กระทบทองคำแรงมาก\n'
@@ -550,19 +550,22 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
     )
 
     by_category = get_predictions_by_category(predictions)
-    # Show only categories that impact gold trading
+    # Show all 4 categories for gold trading, even if empty
     # Ordered by importance for traders
     display_categories = ['fed', 'gold', 'inflation', 'risk_factors']
 
     for category in display_categories:
-        if category not in by_category:
-            continue
-
-        cat_markets = by_category[category][:3]
         cat_info = CATEGORY_INFO.get(category, {})
         cat_emoji = cat_info.get('emoji', '📌')
         cat_label = cat_info.get('label_th', category.capitalize())
 
+        if category not in by_category:
+            # Show category header with "no active markets" message
+            message += f"{cat_emoji} <b>{cat_label}</b>\n"
+            message += "<i>ไม่มีตลาด active ตอนนี้ (จะแสดงเมื่อมีตลาดใหม่)</i>\n\n"
+            continue
+
+        cat_markets = by_category[category][:3]
         message += f"{cat_emoji} <b>{cat_label}</b>\n"
 
         for market in cat_markets:
@@ -695,15 +698,27 @@ def _extract_condition_from_question(question: str) -> str:
         return "ลดดอกเบี้ย"
     
     # Gold price targets
-    gold_above = re.search(r'gold.*?((?:above|above \$|hit \$|reach \$)\s*[\d,]+)', q_lower)
+    gold_above = re.search(r'gold.*?(?:hit|reach|above|below)\s*\$?([\d,]+)', q_lower)
     if gold_above:
-        price = gold_above.group(1).replace('above', '').replace('$', '').strip()
-        return f"ทะลุ ${price}"
+        price = gold_above.group(1).replace(',', '').strip()
+        if 'above' in q_lower or 'hit' in q_lower or 'reach' in q_lower:
+            return f"ทะลุ ${price}"
+        else:
+            return f"ต่ำกว่า ${price}"
     
     gold_below = re.search(r'gold.*?((?:below|below \$|under \$)\s*[\d,]+)', q_lower)
     if gold_below:
         price = gold_below.group(1).replace('below', '').replace('$', '').strip()
         return f"ต่ำกว่า ${price}"
+    
+    # CPI/Inflation
+    cpi_match = re.search(r'cpi.*?(?:above|below|greater than|less than)\s*([\d.]+)%?', q_lower)
+    if cpi_match:
+        threshold = cpi_match.group(1)
+        if 'above' in q_lower or 'greater' in q_lower:
+            return f"CPI > {threshold}%"
+        else:
+            return f"CPI < {threshold}%"
     
     # Recession
     recession = re.search(r'(recession|ถดถอย)', q_lower)
@@ -728,6 +743,8 @@ def _get_opposite_condition(condition: str) -> str:
         'ทะลุ ': 'ไม่ทะลุ ',
         'ต่ำกว่า ': 'สูงกว่า ',
         'ถดถอย': 'ไม่ถดถอย',
+        'CPI > ': 'CPI ≤ ',
+        'CPI < ': 'CPI ≥ ',
     }
     
     for key, opposite in opposites.items():
