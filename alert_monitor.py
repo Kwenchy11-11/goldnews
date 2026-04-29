@@ -253,10 +253,30 @@ def format_alert_message(alert: MarketAlert) -> str:
 
 
 def send_alert(alert: MarketAlert) -> bool:
-    """Send a new market alert to Telegram."""
+    """Send a new market alert to Telegram using predictions bot token."""
     message = format_alert_message(alert)
-    import telegram_bot
-    return telegram_bot.send_message(message)
+
+    # Use PREDICTIONS_BOT_TOKEN for sending alerts
+    if not config.PREDICTIONS_BOT_TOKEN:
+        logger.error("PREDICTIONS_BOT_TOKEN not set")
+        return False
+
+    api_url = f'https://api.telegram.org/bot{config.PREDICTIONS_BOT_TOKEN}/sendMessage'
+    data = {
+        'chat_id': config.TELEGRAM_CHAT_ID,
+        'text': message,
+        'parse_mode': 'HTML',
+        'disable_web_page_preview': True,
+    }
+
+    try:
+        response = requests.post(api_url, data=data, timeout=10)
+        response.raise_for_status()
+        logger.info(f"Alert sent successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send alert: {e}")
+        return False
 
 
 def check_and_alert():
