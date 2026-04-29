@@ -400,7 +400,19 @@ def get_predictions_by_category(markets: List[PredictionMarket]) -> Dict[str, Li
 # Telegram Bot Functions
 # ============================================================
 
-def send_message(text: str, chat_id: Optional[int] = None) -> bool:
+def get_reply_keyboard():
+    """Get the reply keyboard markup for quick commands."""
+    return {
+        'keyboard': [
+            [{'text': '🎯 Predictions'}, {'text': '🔔 Alerts'}],
+            [{'text': '❓ Help'}],
+        ],
+        'resize_keyboard': True,
+        'one_time_keyboard': False,
+    }
+
+
+def send_message(text: str, chat_id: Optional[int] = None, reply_markup: Optional[dict] = None) -> bool:
     """Send a message to Telegram."""
     if chat_id is None:
         chat_id = TELEGRAM_CHAT_ID
@@ -412,6 +424,9 @@ def send_message(text: str, chat_id: Optional[int] = None) -> bool:
         'parse_mode': 'HTML',
         'disable_web_page_preview': True,
     }
+
+    if reply_markup:
+        payload['reply_markup'] = reply_markup
 
     try:
         response = requests.post(url, json=payload, timeout=10)
@@ -550,10 +565,9 @@ def handle_start_command(chat_id: int) -> bool:
         "💰 เงินเฟ้อ\n"
         "👷 การจ้างงาน\n"
         "📊 เศรษฐกิจ\n\n"
-        "พิมพ์ <b>/predictions</b> เพื่อดูตลาดล่าสุด\n"
-        "พิมพ์ <b>/help</b> เพื่อดูคำสั่งทั้งหมด"
+        "กดปุ่มด้านล่างเพื่อใช้งานได้เลยครับ"
     )
-    return send_message(message, chat_id=chat_id)
+    return send_message(message, chat_id=chat_id, reply_markup=get_reply_keyboard())
 
 
 def handle_alerts_command(chat_id: int) -> bool:
@@ -582,7 +596,7 @@ def process_update(update: dict) -> bool:
     update_id = update.get('update_id')
     message = update.get('message', {})
     chat_id = message.get('chat', {}).get('id')
-    text = message.get('text', '').strip().lower()
+    text = message.get('text', '').strip()
 
     # Skip if we've already processed this update
     if _last_update_id is not None and update_id <= _last_update_id:
@@ -590,18 +604,17 @@ def process_update(update: dict) -> bool:
 
     _last_update_id = update_id
 
-    if not text.startswith('/'):
-        return False
+    # Route commands (both /commands and button text)
+    text_lower = text.lower()
 
-    # Route commands
-    if text == '/predictions' or text == '/prediction':
+    if text_lower in ('/predictions', '/prediction', '🎯 predictions', 'predictions'):
         return handle_predictions_command(chat_id)
-    elif text == '/help':
-        return handle_help_command(chat_id)
-    elif text == '/start':
-        return handle_start_command(chat_id)
-    elif text == '/alerts':
+    elif text_lower in ('/alerts', '🔔 alerts', 'alerts'):
         return handle_alerts_command(chat_id)
+    elif text_lower in ('/help', '❓ help', 'help'):
+        return handle_help_command(chat_id)
+    elif text_lower in ('/start', 'start'):
+        return handle_start_command(chat_id)
 
     return False
 
