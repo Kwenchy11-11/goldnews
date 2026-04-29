@@ -67,16 +67,6 @@ CATEGORY_INFO = {
             'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
         ),
     },
-    'inflation': {
-        'label_th': 'Inflation (CPI/PPI)',
-        'emoji': '💰',
-        'explanation': (
-            'เงินเฟ้อคือภาวะที่สินค้าแพงขึ้นเรื่อยๆ\n'
-            '• เงินเฟ้อสูง → ทองมักขึ้น (เพราะทองป้องกันเงินเฟ้อ)\n'
-            '• เงินเฟ้อต่ำ → ทองอาจลง\n'
-            'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
-        ),
-    },
     'gold': {
         'label_th': 'Gold Price Targets',
         'emoji': '🥇',
@@ -87,46 +77,134 @@ CATEGORY_INFO = {
             'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
         ),
     },
-    'risk_factors': {
-        'label_th': 'Risk Factors (War/Oil)',
-        'emoji': '🔥',
+    'geopolitics': {
+        'label_th': 'Geopolitics (War/Risk)',
+        'emoji': '🌍',
         'explanation': (
-            'ปัจจัยเสี่ยงที่กระทบทองคำแรงมาก\n'
+            'ปัจจัยเสี่ยงทางภูมิรัฐศาสตร์ที่กระทบทองคำแรงมาก\n'
             '• สงครามตะวันออกกลาง → ทองขึ้น (safe haven)\n'
+            '• การหยุดยิง → ทองอาจลง (risk-on)\n'
+            'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
+        ),
+    },
+    'inflation': {
+        'label_th': 'Inflation & Macro',
+        'emoji': '💰',
+        'explanation': (
+            'ข้อมูลเงินเฟ้อและเศรษฐกิจมหภาค\n'
+            '• เงินเฟ้อสูง → ทองมักขึ้น (เพราะทองป้องกันเงินเฟ้อ)\n'
+            '• NFP/ว่างงาน → ส่งผลต่อนโยบาย Fed\n'
+            'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
+        ),
+    },
+    'energy': {
+        'label_th': 'Energy (Oil)',
+        'emoji': '🛢️',
+        'explanation': (
+            'ราคาน้ำมันส่งผลต่อเงินเฟ้อและทองคำ\n'
             '• น้ำมันแพง → เงินเฟ้อ → ทองขึ้น\n'
-            '• นิวเคลียร์ → ทองพุ่ง (risk-off extreme)\n'
+            '• OPEC ตัดสินใจ → กระทบอุปทานน้ำมัน\n'
+            'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
+        ),
+    },
+    'crypto': {
+        'label_th': 'Crypto Macro',
+        'emoji': '₿',
+        'explanation': (
+            'Bitcoin ETF flows ส่งผลต่อ sentiment ตลาดการเงิน\n'
+            '• BTC ETF ไหลเข้า = risk-on = ทองอาจลง\n'
+            '• BTC ETF ไหลออก = risk-off = ทองอาจขึ้น\n'
             'ตัวเลข % คือความน่าจะเป็นที่ตลาดคาดการณ์'
         ),
     },
 }
 
 
+# ============================================================
+# Keyword Dictionary for Gold Trading Analysis
+# ============================================================
+# Partial match, case-insensitive, scans both Title and Description
+# Priority order: Fed > Gold > Geopolitics > Inflation > Energy > Crypto
+
+CATEGORY_KEYWORDS = {
+    'fed': [
+        'fed ', 'federal reserve', 'interest rate', 'rate cut', 'rate hike',
+        'fomc', 'basis points', 'bps', 'rate decision', 'fed fund',
+        'monetary policy', 'powell', 'fed decision', 'federal open market',
+    ],
+    'gold': [
+        'gold', 'xau', 'ounce of gold', 'xauusd', 'gold price',
+    ],
+    'geopolitics': [
+        'iran', 'israel', 'middle east', 'ceasefire', 'strike', 'hormuz',
+        'gaza', 'lebanon', 'hezbollah', 'war ', 'war in', 'war by',
+        'nuclear', 'nuke', 'geopolitical',
+    ],
+    'inflation': [
+        'cpi', 'pce', 'inflation', 'nfp', 'unemployment', 'recession',
+        'nonfarm', 'non-farm', 'consumer price', 'producer price',
+        'jobless', 'payroll', 'jobs report',
+    ],
+    'energy': [
+        'wti', 'crude oil', 'brent', 'opec', 'oil price', 'oil supply',
+        'crude ', 'energy ',
+    ],
+    'crypto': [
+        'bitcoin etf', 'btc etf', 'btc etf flows', 'bitcoin etf flows',
+    ],
+}
+
+# Category priority order (first match wins if market matches multiple)
+CATEGORY_PRIORITY = ['fed', 'gold', 'geopolitics', 'inflation', 'energy', 'crypto']
+
+# Volume thresholds by category
+VOLUME_THRESHOLDS = {
+    'fed': 50000,      # $50k for Fed (high liquidity)
+    'gold': 5000,      # $5k for others (catch early trends)
+    'geopolitics': 5000,
+    'inflation': 5000,
+    'energy': 5000,
+    'crypto': 5000,
+}
+
+# Exclusion keywords - remove noise
+EXCLUDE_KEYWORDS = [
+    # Sports
+    'nhl', 'nba', 'nfl', 'mlb', 'soccer', 'football', 'hockey',
+    'basketball', 'baseball', 'stanley cup', 'super bowl',
+    'olympics', 'world cup', 'championship', 'epl', 'premier league',
+    # Crypto (except ETF flows)
+    'bitcoin price', 'ethereum price', 'btc price', 'eth price',
+    'crypto ', 'blockchain', 'defi', 'nft',
+    # Tech companies
+    'openai', 'chatgpt', 'ai company', 'tech company', 'tesla',
+    # US Politics (personality politics, not policy)
+    'biden', 'election', 'vote', 'polling', 'campaign',
+    # UK/EU Politics
+    'uk election', 'british', 'germany election', 'france election',
+    # Generic Russia/Ukraine (keep only if nuclear-related)
+    'putin', 'zelenskyy', 'president russia', 'president ukraine',
+    'ukraine election', 'russia election', 'netanyahu',
+    # Other noise
+    'brentford',  # Football team, not Brent crude
+]
+
+
 def _categorize_market(question: str, description: str = '') -> str:
-    """Categorize a market into clear trading-relevant categories."""
+    """
+    Categorize a market using keyword dictionary with priority order.
+    
+    Priority: Fed > Gold > Geopolitics > Inflation > Energy > Crypto
+    First match wins (based on priority order).
+    """
     combined = (question + ' ' + description).lower()
-
-    # Fed & Interest Rates (primary driver)
-    if any(kw in combined for kw in ['fed rate', 'federal reserve', 'interest rate', 'fed fund',
-                                       'fed raise', 'fed cut', 'fed hold', 'the fed ', 'fomc']):
-        return 'fed'
-
-    # Gold Price Targets (direct trading)
-    if any(kw in combined for kw in ['gold price', 'gold above', 'gold below', 'gold at',
-                                       'gold hit', 'gold reach', 'xauusd', 'gold end',
-                                       'gold close', 'gold finish', 'gold $', 'xau']):
-        return 'gold'
-
-    # Inflation Data (CPI/PPI)
-    if any(kw in combined for kw in ['inflation', 'cpi', 'consumer price', 'ppi']):
-        return 'inflation'
-
-    # Risk Factors: Oil, War, Middle East (geopolitical risk → gold safe haven)
-    if any(kw in combined for kw in ['oil', 'brent', 'wti', 'น้ำมัน',
-                                       'iran', 'israel', 'gaza', 'lebanon', 'hezbollah',
-                                       'ceasefire', 'หยุดยิง', 'war', 'nuclear', 'nuke']):
-        return 'risk_factors'
-
-    return 'economy'
+    
+    for category in CATEGORY_PRIORITY:
+        keywords = CATEGORY_KEYWORDS.get(category, [])
+        if any(kw in combined for kw in keywords):
+            return category
+    
+    return 'other'
 
 
 def _translate_question(question: str, category: str) -> str:
@@ -217,52 +295,12 @@ def _translate_outcome_name(name: str, category: str) -> str:
 
 
 def fetch_polymarket_predictions() -> List[PredictionMarket]:
-    """Fetch prediction markets from Polymarket Gamma API."""
-    # STRICT keywords — only Gold/Fed/CPI/Oil/Middle East that impact gold prices
-    # Note: Using word boundaries to avoid false positives (e.g., 'gold' in 'Goldman')
-    relevant_keywords = [
-        # Gold (primary focus) - avoid matching 'Goldman'
-        'gold price', 'gold above', 'gold below', 'gold $', 'gold at', 'gold hit',
-        'gold reach', 'xau', 'xauusd', 'ทองคำ', 'ทอง',
-        # Fed / Interest rates (direct impact on gold) - EXPANDED for FOMC
-        'fed', 'fomc', 'federal reserve', 'interest rate', 'rate decision',
-        'rate cut', 'rate hike', 'rate hold', 'fed decision', 'fomc meeting',
-        'fed rate', 'federal open market',
-        # Inflation (CPI/PPI impact on gold)
-        'cpi', 'inflation', 'consumer price', 'ppi',
-        # Oil (inflation/war hedge, impacts gold) - EXPANDED for Hormuz
-        'oil', 'brent', 'wti', 'crude', 'น้ำมัน', 'hormuz', 'strait', 'blockade',
-        'oil price', 'oil supply', 'oil disruption',
-        # Middle East conflicts (geopolitical risk → gold)
-        'iran', 'israel', 'middle east', 'gaza', 'lebanon', 'hezbollah',
-        'ceasefire', 'หยุดยิง', 'สงคราม',
-        # Trump policy (can impact gold via trade wars/policy)
-        'trump tariff', 'trump trade', 'trump policy', 'trump executive',
-        # War-related (but avoid 'war' in names like 'Warren')
-        ' war ', 'war in', 'war by', 'war on', 'war?', 'war.', 'war,',
-        # Nuclear threats (immediate gold impact)
-        'nuclear', 'nuke', 'นิวเคลียร์',
-    ]
-
-    # STRICT exclusion — remove political noise that doesn't impact gold
-    exclude_keywords = [
-        # Sports
-        'nhl', 'nba', 'nfl', 'mlb', 'soccer', 'football', 'hockey',
-        'basketball', 'baseball', 'stanley cup', 'super bowl',
-        'olympics', 'world cup', 'championship',
-        # Crypto
-        'crypto', 'bitcoin', 'ethereum', 'btc', 'eth',
-        # Tech companies
-        'openai', 'chatgpt', 'ai company', 'tech company', 'tesla',
-        # US Politics (only exclude personality politics, keep policy)
-        'biden', 'election', 'vote', 'polling', 'campaign',
-        # UK/EU Politics
-        'uk election', 'british', 'germany election', 'france election',
-        # Generic Russia/Ukraine (keep only if nuclear-related - checked separately)
-        'putin', 'zelenskyy', 'president russia', 'president ukraine',
-        'ukraine election', 'russia election', 'netanyahu',
-    ]
-
+    """
+    Fetch prediction markets from Polymarket Gamma API.
+    
+    Uses partial match, case-insensitive search across Title + Description.
+    Filters by category-specific volume thresholds.
+    """
     markets_data = []
 
     # Strategy 1: Fetch from economics tag (tag_id=107) - PRIMARY SOURCE
@@ -273,7 +311,7 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
                 'active': 'true',
                 'closed': 'false',
                 'limit': '500',
-                'tag_id': '107',  # Business/Economics tag
+                'tag_id': '107',
             },
             timeout=15,
             headers={'Accept': 'application/json'}
@@ -282,11 +320,37 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
         data = response.json()
         market_list = data if isinstance(data, list) else data.get('markets', data)
         markets_data.extend(market_list)
-        logger.info(f"Fetched {len(market_list)} markets from economics tag")
+        logger.info(f"Fetched {len(market_list)} markets from economics tag (107)")
     except Exception as e:
         logger.warning(f"Failed to fetch economics tag markets: {e}")
 
-    # Strategy 2: Events API with economics tag - gets nested markets
+    # Strategy 2: Additional tag IDs for broader discovery
+    additional_tags = [
+        ('1', 'World'),           # World events (geopolitics)
+        ('108', 'Politics'),      # Politics (may have policy impacts)
+    ]
+    for tag_id, tag_name in additional_tags:
+        try:
+            response = requests.get(
+                'https://gamma-api.polymarket.com/markets',
+                params={
+                    'active': 'true',
+                    'closed': 'false',
+                    'limit': '500',
+                    'tag_id': tag_id,
+                },
+                timeout=15,
+                headers={'Accept': 'application/json'}
+            )
+            response.raise_for_status()
+            data = response.json()
+            market_list = data if isinstance(data, list) else data.get('markets', data)
+            markets_data.extend(market_list)
+            logger.info(f"Fetched {len(market_list)} markets from {tag_name} tag ({tag_id})")
+        except Exception as e:
+            logger.warning(f"Failed to fetch {tag_name} tag markets: {e}")
+
+    # Strategy 3: Events API with economics tag
     try:
         response = requests.get(
             'https://gamma-api.polymarket.com/events',
@@ -309,7 +373,7 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
     except Exception as e:
         logger.warning(f"Failed to fetch events: {e}")
 
-    # Strategy 3: Direct fetch without tag filter (catches markets not tagged)
+    # Strategy 4: Direct fetch without tag filter
     try:
         response = requests.get(
             'https://gamma-api.polymarket.com/markets',
@@ -344,47 +408,37 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
             seen_questions.add(question)
 
             description = market.get('description', '') or ''
-            question_lower = question.lower()
-            desc_lower = description.lower()
-            combined = question_lower + ' ' + desc_lower
+            combined = (question + ' ' + description).lower()
 
-            if any(kw in combined for kw in exclude_keywords):
+            # Check exclusions first
+            if any(kw in combined for kw in EXCLUDE_KEYWORDS):
                 continue
 
-            if not any(kw in combined for kw in relevant_keywords):
-                continue
+            # Categorize using keyword dictionary (partial match, case-insensitive)
+            category = _categorize_market(question, description)
+            if category == 'other':
+                continue  # Skip markets that don't match any category
 
-            # Filter by year - allow 2026 for Fed markets (they're about 2026 rate cuts)
-            # But skip very distant markets (2027+)
+            # Year filter - skip 2027+ unless nuclear-related
             import re
             year_match = re.search(r'\b(20\d{2})\b', question)
             if year_match:
                 year = int(year_match.group(1))
-                if year > 2026:
-                    # Skip markets ending in 2027+ unless nuclear-related
-                    if 'nuclear' not in combined and 'nuke' not in combined:
-                        continue
+                if year > 2026 and 'nuclear' not in combined and 'nuke' not in combined:
+                    continue
 
             # Russia/Ukraine only if nuclear-related
             if any(kw in combined for kw in ['putin', 'zelenskyy', 'ukraine', 'russia']):
                 if 'nuclear' not in combined and 'nuke' not in combined:
-                    continue  # Skip non-nuclear Russia/Ukraine news
+                    continue
 
-            category = _categorize_market(question, description)
-
-            # Category-specific volume thresholds
-            # Fed: $100k (high liquidity today), Gold/Oil: $10k (early signals)
+            # Volume threshold by category
             volume = float(market.get('volume', market.get('volumeNum', 0)))
-            if category == 'fed':
-                min_volume = 100000
-            elif category in ('gold', 'risk_factors'):
-                min_volume = 10000
-            else:
-                min_volume = 50000
-
+            min_volume = VOLUME_THRESHOLDS.get(category, 5000)
             if volume < min_volume:
                 continue
 
+            # Parse outcomes
             outcomes = []
             try:
                 outcomes_names = market.get('outcomes', [])
@@ -550,9 +604,8 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
     )
 
     by_category = get_predictions_by_category(predictions)
-    # Show all 4 categories for gold trading, even if empty
-    # Ordered by importance for traders
-    display_categories = ['fed', 'gold', 'inflation', 'risk_factors']
+    # Show all 6 categories in priority order
+    display_categories = ['fed', 'gold', 'geopolitics', 'inflation', 'energy', 'crypto']
 
     for category in display_categories:
         cat_info = CATEGORY_INFO.get(category, {})
