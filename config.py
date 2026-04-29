@@ -17,6 +17,9 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 
+# Predictions bot (separate bot for /predictions command only)
+PREDICTIONS_BOT_TOKEN = os.getenv('PREDICTIONS_BOT_TOKEN', '')
+
 # Optional settings with defaults
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '30'))  # minutes
 MARKET_HOURS_ONLY = os.getenv('MARKET_HOURS_ONLY', 'true').lower() == 'true'

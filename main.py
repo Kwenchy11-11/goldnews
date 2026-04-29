@@ -3,9 +3,12 @@
 Gold News Telegram Bot
 =====================
 Main entry point for the gold news alert bot.
+Sends automatic news alerts every 30 minutes (Mon-Fri).
+
+For predictions only, use predictions_bot.py instead.
 
 Usage:
-    python main.py              # Start continuous daemon + command handler
+    python main.py              # Start continuous daemon
     python main.py --once       # Run a single news cycle
     python main.py --test       # Send a test message
 """
@@ -13,12 +16,10 @@ Usage:
 import argparse
 import logging
 import sys
-import threading
 
 import config
 import scheduler
 import telegram_bot
-import command_handler
 
 logger = logging.getLogger('goldnews')
 
@@ -82,21 +83,12 @@ def main():
             logger.error("❌ News cycle failed")
         return
 
-    # Continuous mode: run scheduler + command handler in parallel
+    # Continuous mode: run scheduler
     logger.info("Starting continuous mode...")
-    logger.info("Commands available: /predictions, /news, /status, /help")
+    logger.info("Gold News Bot will send alerts every 30 min (Mon-Fri)")
+    logger.info("For predictions, run predictions_bot.py separately")
 
-    # Start scheduler in a separate thread
-    scheduler_thread = threading.Thread(
-        target=scheduler.start_scheduler,
-        daemon=True,
-        name="Scheduler"
-    )
-    scheduler_thread.start()
-    logger.info("Scheduler started (background thread)")
-
-    # Run command handler in main thread (keeps process alive)
-    command_handler.start_command_handler()
+    scheduler.start_scheduler()
 
 
 if __name__ == "__main__":
