@@ -23,6 +23,7 @@ import requests
 from dotenv import load_dotenv
 
 import config
+import alert_monitor
 
 # Load env vars
 load_dotenv()
@@ -531,6 +532,7 @@ def handle_help_command(chat_id: int) -> bool:
     message = (
         "🤖 <b>Gold Predictions Bot - คำสั่งที่ใช้ได้</b>\n\n"
         "🎯 <b>/predictions</b> — ดูตลาดคาดการณ์ Polymarket\n"
+        "🔔 <b>/alerts</b> — ดูสถานะ auto alert\n"
         "❓ <b>/help</b> — แสดงคำสั่งทั้งหมด\n\n"
         "<i>บอทนี้แสดงเฉพาะข้อมูลคาดการณ์จาก Polymarket เท่านั้น</i>\n"
         "<i>สำหรับข่าวทองคำอัตโนมัติ ใช้ @GoldNews_mifibot</i>"
@@ -550,6 +552,25 @@ def handle_start_command(chat_id: int) -> bool:
         "📊 เศรษฐกิจ\n\n"
         "พิมพ์ <b>/predictions</b> เพื่อดูตลาดล่าสุด\n"
         "พิมพ์ <b>/help</b> เพื่อดูคำสั่งทั้งหมด"
+    )
+    return send_message(message, chat_id=chat_id)
+
+
+def handle_alerts_command(chat_id: int) -> bool:
+    """Handle /alerts command - show alert status."""
+    from alert_monitor import load_seen_markets
+
+    seen = load_seen_markets()
+    status = "✅ เปิดอยู่" if config.ENABLE_AUTO_ALERTS else "❌ ปิดอยู่"
+    seen_count = len(seen.get('seen_ids', []))
+
+    message = (
+        "🔔 <b>สถานะ Auto Alert</b>\n\n"
+        f"สถานะ: {status}\n"
+        f"ตรวจสอบทุก: {config.ALERT_CHECK_INTERVAL} นาที\n"
+        f"ช่วงเวลาพิเศษ: {config.ALERT_WINDOW_START} - {config.ALERT_WINDOW_END} (เวลาไทย)\n"
+        f"Volume ขั้นต่ำ: ${config.ALERT_VOLUME_THRESHOLD:,}\n"
+        f"ตลาดที่เห็นแล้ว: {seen_count} ตลาด"
     )
     return send_message(message, chat_id=chat_id)
 
@@ -579,6 +600,8 @@ def process_update(update: dict) -> bool:
         return handle_help_command(chat_id)
     elif text == '/start':
         return handle_start_command(chat_id)
+    elif text == '/alerts':
+        return handle_alerts_command(chat_id)
 
     return False
 
@@ -602,6 +625,9 @@ def start_bot():
         _last_update_id = updates[-1].get('update_id')
         logger.info(f"Skipping {_last_update_id} old updates")
 
+    # Start alert monitor if enabled
+    alert_monitor.start_monitor()
+
     logger.info("Bot started. Waiting for commands...")
 
     while True:
@@ -616,6 +642,7 @@ def start_bot():
 
         except KeyboardInterrupt:
             logger.info("Bot stopped by user")
+            alert_monitor.stop_monitor()
             break
         except Exception as e:
             logger.error(f"Error in bot loop: {e}", exc_info=True)
