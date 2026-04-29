@@ -215,6 +215,8 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
     Fetches gold, Fed, inflation, employment, and economy markets
     that affect gold prices. Returns a list of PredictionMarket objects
     with Thai translations and beginner-friendly explanations.
+
+    Tries both the markets API and events API (with economics tag).
     """
     # Keywords for markets that affect gold prices
     relevant_keywords = [
@@ -241,32 +243,55 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
         'biden', 'crypto', 'bitcoin', 'ethereum',
     ]
 
+    markets_data = []
+
+    # Try markets API
     try:
         response = requests.get(
             config.POLYMARKET_URL,
-            params={'active': 'true', 'closed': 'false', 'limit': '100'},
+            params={'active': 'true', 'closed': 'false', 'limit': '200'},
             timeout=15,
             headers={'Accept': 'application/json'}
         )
         response.raise_for_status()
         data = response.json()
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch Polymarket predictions: {e}")
-        return []
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.error(f"Failed to parse Polymarket data: {e}")
-        return []
+        market_list = data.get('markets', data) if isinstance(data, dict) else data
+        markets_data.extend(market_list)
     except Exception as e:
-        logger.error(f"Unexpected error fetching Polymarket predictions: {e}")
+        logger.warning(f"Failed to fetch Polymarket markets: {e}")
+
+    # Try events API with economics tag
+    try:
+        response = requests.get(
+            'https://gamma-api.polymarket.com/events',
+            params={'active': 'true', 'closed': 'false', 'limit': '50', 'tag': 'economics'},
+            timeout=15,
+            headers={'Accept': 'application/json'}
+        )
+        response.raise_for_status()
+        events_data = response.json()
+        if isinstance(events_data, list):
+            for event in events_data:
+                # Each event may have nested markets
+                for market in event.get('markets', []):
+                    markets_data.append(market)
+    except Exception as e:
+        logger.warning(f"Failed to fetch Polymarket events: {e}")
+
+    if not markets_data:
+        logger.info("No Polymarket data available from any source")
         return []
 
     markets = []
-    market_list = data.get('markets', data) if isinstance(data, dict) else data
+    seen_questions = set()
 
-    for market in market_list:
+    for market in markets_data:
         try:
             question = market.get('question', '')
+            if not question or question in seen_questions:
+                continue
+            seen_questions.add(question)
+
             description = market.get('description', '') or ''
             question_lower = question.lower()
             desc_lower = description.lower()
@@ -283,33 +308,35 @@ def fetch_polymarket_predictions() -> List[PredictionMarket]:
             # Categorize
             category = _categorize_market(question, description)
 
-            # Get outcomes
-            outcomes_data = market.get('outcomes', [])
-            outcome_prices = market.get('outcome_prices', [])
-
+            # Get outcomes - handle both formats:
+            # 1. outcomePrices as JSON string: '["0.65", "0.35"]'
+            # 2. outcomes as JSON string: '["Yes", "No"]'
             outcomes = []
-            for i, outcome_name in enumerate(outcomes_data):
-                price = float(outcome_prices[i]) if i < len(outcome_prices) else 0
-                outcomes.append({
-                    'name': outcome_name,
-                    'price': price,
-                })
+            try:
+                outcomes_names = market.get('outcomes', [])
+                if isinstance(outcomes_names, str):
+                    outcomes_names = json.loads(outcomes_names)
 
-            # If no outcomes data, try alternative format
-            if not outcomes:
-                # Some markets have outcomes in a different format
-                for outcome in market.get('outcomes_data', []):
+                outcome_prices_raw = market.get('outcomePrices', market.get('outcome_prices', []))
+                if isinstance(outcome_prices_raw, str):
+                    outcome_prices_raw = json.loads(outcome_prices_raw)
+
+                for i, name in enumerate(outcomes_names):
+                    price = float(outcome_prices_raw[i]) if i < len(outcome_prices_raw) else 0
                     outcomes.append({
-                        'name': outcome.get('name', ''),
-                        'price': float(outcome.get('price', 0)),
+                        'name': name,
+                        'price': price,
                     })
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Error parsing outcomes for '{question}': {e}")
+                continue
 
             # Skip if no valid outcomes
             if not outcomes:
                 continue
 
             # Get volume
-            volume = float(market.get('volume', 0))
+            volume = float(market.get('volume', market.get('volumeNum', 0)))
 
             # Get URL
             slug = market.get('slug', '')
