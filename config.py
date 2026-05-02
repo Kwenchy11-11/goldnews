@@ -13,6 +13,10 @@ import pytz
 # Load .env file if it exists
 load_dotenv()
 
+# Base paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+
 # Thailand timezone
 THAI_TZ = pytz.timezone('Asia/Bangkok')
 
