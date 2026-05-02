@@ -539,117 +539,375 @@ def analyze_events_batch(events: list) -> tuple:
 
 def parse_batch_response(response: str, events: list) -> tuple:
     """
-    Parse Gemini's batch response into individual analyses and market summary.
-    Returns (list[AnalysisResult], MarketSummary).
+    Parse Gemini's batch response into list of AnalysisResult and MarketSummary.
+
+    Returns (analyses, summary) tuple.
     """
+    analyses = []
+    summary = MarketSummary(
+        overall_bias='NEUTRAL',
+        gold_outlook='ไม่มีข้อมูล',
+        key_times='-',
+        usd_impact='-',
+        confidence=0,
+    )
+
     lines = response.strip().split('\n')
-
-    # Parse market summary section
-    overall_bias = 'NEUTRAL'
-    gold_outlook = ''
-    key_times = ''
-    usd_impact = ''
-    summary_confidence = 50
-
-    # Parse individual event sections
-    event_analyses = {}
-    current_event = None
+    current_analysis = {}
+    parsing_summary = True  # Start with summary section
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # Summary section
-        if 'OVERALL_BIAS:' in line:
-            overall_bias = line.split('OVERALL_BIAS:')[1].strip().upper()
-            if overall_bias not in ('BULLISH', 'BEARISH', 'NEUTRAL'):
-                overall_bias = 'NEUTRAL'
-        elif 'GOLD_OUTLOOK:' in line:
-            gold_outlook = line.split('GOLD_OUTLOOK:')[1].strip()
-        elif 'KEY_TIMES:' in line:
-            key_times = line.split('KEY_TIMES:')[1].strip()
-        elif 'USD_IMPACT:' in line:
-            usd_impact = line.split('USD_IMPACT:')[1].strip()
-        elif 'CONFIDENCE:' in line and not current_event:
-            conf_str = line.split('CONFIDENCE:')[1].strip().replace('%', '')
-            try:
-                summary_confidence = int(conf_str) if conf_str.isdigit() else 50
-            except ValueError:
-                summary_confidence = 50
+        # Check for section transition
+        if 'ส่วนที่ 2' in line or 'วิเคราะห์แต่ละข่าว' in line or line.startswith('━━'):
+            parsing_summary = False
+            continue
 
-        # Individual event section
-        elif 'EVENT:' in line:
-            event_name = line.split('EVENT:')[1].strip()
-            # Match to original event
-            for orig in events:
-                if orig.title.lower() in event_name.lower() or event_name.lower() in orig.title.lower():
-                    current_event = orig.title
-                    event_analyses[current_event] = {
-                        'impact': orig.impact.upper(),
-                        'bias': 'NEUTRAL',
-                        'confidence': 50,
-                        'reasoning': '',
-                    }
-                    break
-        elif current_event and current_event in event_analyses:
-            if 'IMPACT:' in line:
-                impact = line.split('IMPACT:')[1].strip().upper()
-                if impact in ('HIGH', 'MEDIUM', 'LOW'):
-                    event_analyses[current_event]['impact'] = impact
-            elif 'BIAS:' in line:
-                bias = line.split('BIAS:')[1].strip().upper()
-                if bias in ('BULLISH', 'BEARISH', 'NEUTRAL'):
-                    event_analyses[current_event]['bias'] = bias
-            elif 'CONFIDENCE:' in line:
-                conf_str = line.split('CONFIDENCE:')[1].strip().replace('%', '')
-                try:
-                    event_analyses[current_event]['confidence'] = int(conf_str) if conf_str.isdigit() else 50
-                except ValueError:
-                    pass
-            elif 'REASONING:' in line:
-                event_analyses[current_event]['reasoning'] = line.split('REASONING:')[1].strip()
+        # Parse summary section
+        if parsing_summary:
+            if line.startswith('OVERALL_BIAS:'):
+                summary.overall_bias = line.split(':', 1)[1].strip().upper()
+            elif line.startswith('GOLD_OUTLOOK:'):
+                summary.gold_outlook = line.split(':', 1)[1].strip()
+            elif line.startswith('KEY_TIMES:'):
+                summary.key_times = line.split(':', 1)[1].strip()
+            elif line.startswith('USD_IMPACT:'):
+                summary.usd_impact = line.split(':', 1)[1].strip()
+            elif line.startswith('CONFIDENCE:'):
+                conf_str = line.split(':', 1)[1].strip().replace('%', '')
+                summary.confidence = int(conf_str) if conf_str.isdigit() else 50
 
-    # Build AnalysisResult list matching original events order
-    analyses = []
-    for event in events:
-        if event.title in event_analyses:
-            a = event_analyses[event.title]
-            analyses.append(AnalysisResult(
-                event_title=event.title,
-                event_title_th=event.title_th,
-                impact=a['impact'],
-                bias=a['bias'],
-                confidence=max(0, min(100, a['confidence'])),
-                reasoning=a['reasoning'] or f'วิเคราะห์อัตโนมัติ: {event.title_th}',
-                country=event.country,
-                forecast=event.forecast,
-                previous=event.previous,
-                event_datetime=getattr(event, 'event_datetime', None),
-            ))
+        # Parse individual event analyses
         else:
-            # Event not found in response, use fallback
-            bias, reasoning = _fallback_bias_analysis(event)
-            analyses.append(AnalysisResult(
-                event_title=event.title,
-                event_title_th=event.title_th,
-                impact=event.impact.upper(),
-                bias=bias,
-                confidence=40,
-                reasoning=reasoning,
-                country=event.country,
-                forecast=event.forecast,
-                previous=event.previous,
-                event_datetime=getattr(event, 'event_datetime', None),
-            ))
+            if line.startswith('EVENT:'):
+                # Save previous analysis if complete
+                if current_analysis and all(k in current_analysis for k in ['event_title', 'impact', 'bias', 'confidence', 'reasoning']):
+                    analyses.append(AnalysisResult(**current_analysis))
+                # Start new analysis
+                event_title = line.split(':', 1)[1].strip()
+                # Match to original event
+                matched_event = None
+                for evt in events:
+                    if evt.title in event_title or event_title in evt.title:
+                        matched_event = evt
+                        break
+                if not matched_event:
+                    matched_event = events[0] if events else None
 
-    # Build MarketSummary
-    summary = MarketSummary(
-        overall_bias=overall_bias,
-        gold_outlook=gold_outlook or 'ไม่สามารถวิเคราะห์ได้',
-        key_times=key_times or 'ดูรายละเอียดในแต่ละข่าว',
-        usd_impact=usd_impact or 'ข่าวเศรษฐกิจสหรัฐมีผลต่อทองคำ',
-        confidence=max(0, min(100, summary_confidence)),
-    )
+                current_analysis = {
+                    'event_title': matched_event.title if matched_event else event_title,
+                    'event_title_th': matched_event.title_th if matched_event else event_title,
+                    'country': matched_event.country if matched_event else 'US',
+                    'forecast': matched_event.forecast if matched_event else '',
+                    'previous': matched_event.previous if matched_event else '',
+                    'event_datetime': getattr(matched_event, 'event_datetime', None),
+                }
+            elif line.startswith('IMPACT:'):
+                current_analysis['impact'] = line.split(':', 1)[1].strip().upper()
+            elif line.startswith('BIAS:'):
+                current_analysis['bias'] = line.split(':', 1)[1].strip().upper()
+            elif line.startswith('CONFIDENCE:'):
+                conf_str = line.split(':', 1)[1].strip().replace('%', '')
+                current_analysis['confidence'] = int(conf_str) if conf_str.isdigit() else 50
+            elif line.startswith('REASONING:'):
+                current_analysis['reasoning'] = line.split(':', 1)[1].strip()
+
+    # Don't forget the last analysis
+    if current_analysis and all(k in current_analysis for k in ['event_title', 'impact', 'bias', 'confidence', 'reasoning']):
+        analyses.append(AnalysisResult(**current_analysis))
 
     return analyses, summary
+
+
+# ============================================================================
+# EVENT IMPACT ENGINE INTEGRATION
+# ============================================================================
+# Integrates deterministic Event Impact Scoring Engine (Layers 1-4) with
+# Gemini AI for Thai-language formatting. Uses rule-based scoring for
+# accuracy, AI only for presentation.
+
+def analyze_event_with_impact_engine(event) -> AnalysisResult:
+    """
+    Analyze a news event using the Event Impact Engine (deterministic)
+    combined with Gemini for Thai formatting.
+
+    This is the PREFERRED analysis method as it uses:
+    - Layer 1: Event Classification (rule-based)
+    - Layer 2: Surprise Calculation (mathematical)
+    - Layer 3: Consensus Analysis (market data)
+    - Layer 4: Event Logging (persistence)
+    - AI (Gemini): Thai language formatting only
+
+    Args:
+        event: EconomicEvent object with title, forecast, previous, etc.
+
+    Returns:
+        AnalysisResult with impact, bias, confidence, and Thai reasoning
+    """
+    try:
+        # Import here to avoid circular imports at module level
+        import sys
+        sys.path.insert(0, '/Users/kwanchanokroumsuk/goldnews')
+
+        from src.core.event_impact_engine import EventImpactEngine, analyze_event_impact
+        from src.core.event_classifier import classify_event
+        from src.core.surprise_engine import EconomicDataPoint, calculate_surprise
+        from src.core.consensus_engine import MarketConsensus
+
+        # Initialize the impact engine
+        engine = EventImpactEngine()
+
+        # Step 1: Classify the event (Layer 1)
+        classification = classify_event(event.title)
+
+        # Step 2: Prepare data point for surprise calculation (Layer 2)
+        # Parse forecast and actual values if available
+        forecast_value = _parse_numeric_value(event.forecast)
+        previous_value = _parse_numeric_value(event.previous)
+
+        # Create data point
+        data_point = EconomicDataPoint(
+            event_name=event.title,
+            category=classification.category.value,
+            forecast=forecast_value,
+            actual=None,  # Not released yet for pre-event analysis
+            previous=previous_value,
+            unit=_detect_unit(event.forecast) if event.forecast else '%'
+        )
+
+        # Step 3: Use the engine to get comprehensive impact assessment
+        impact_result = analyze_event_impact(
+            event_name=event.title,
+            category=classification.category.value,
+            forecast=forecast_value,
+            actual=None,
+            previous=previous_value,
+            unit=data_point.unit
+        )
+
+        # Step 4: Convert composite score to bias and impact
+        composite_score = impact_result.composite_score
+        bias = _score_to_bias(composite_score)
+        impact_level = _score_to_impact_level(abs(composite_score))
+
+        # Step 5: Generate Thai reasoning using Gemini (AI for formatting only)
+        thai_reasoning = _generate_thai_reasoning(
+            event=event,
+            classification=classification,
+            composite_score=composite_score,
+            bias=bias,
+            impact_result=impact_result
+        )
+
+        # Calculate confidence based on available data
+        confidence = _calculate_confidence(event, impact_result)
+
+        return AnalysisResult(
+            event_title=event.title,
+            event_title_th=event.title_th,
+            impact=impact_level,
+            bias=bias,
+            confidence=confidence,
+            reasoning=thai_reasoning,
+            country=event.country,
+            forecast=event.forecast,
+            previous=event.previous,
+            event_datetime=getattr(event, 'event_datetime', None),
+        )
+
+    except Exception as e:
+        logger.error(f"Event Impact Engine analysis failed for {event.title}: {e}")
+        # Fall back to original analyze_event function
+        return analyze_event(event)
+
+
+def _parse_numeric_value(value_str: Optional[str]) -> Optional[float]:
+    """Parse a numeric value from string, handling various formats."""
+    if not value_str:
+        return None
+
+    # Remove common suffixes and prefixes
+    cleaned = value_str.strip()
+    for suffix in ['%', 'K', 'M', 'B', 'k', 'm', 'b']:
+        cleaned = cleaned.replace(suffix, '')
+
+    # Handle ranges (take the middle value)
+    if '-' in cleaned and cleaned.replace('-', '').replace('.', '').isdigit():
+        parts = cleaned.split('-')
+        try:
+            return (float(parts[0]) + float(parts[1])) / 2
+        except (ValueError, IndexError):
+            pass
+
+    # Try direct conversion
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def _detect_unit(value_str: Optional[str]) -> str:
+    """Detect the unit from a value string."""
+    if not value_str:
+        return '%'
+
+    value_str = value_str.strip().upper()
+    if '%' in value_str:
+        return '%'
+    elif 'K' in value_str:
+        return 'K'
+    elif 'M' in value_str:
+        return 'M'
+    elif 'B' in value_str:
+        return 'B'
+    else:
+        return 'index'
+
+
+def _score_to_bias(score: float) -> str:
+    """Convert composite score (-10 to +10) to bias direction."""
+    if score >= 2:
+        return 'BULLISH'
+    elif score <= -2:
+        return 'BEARISH'
+    else:
+        return 'NEUTRAL'
+
+
+def _score_to_impact_level(abs_score: float) -> str:
+    """Convert absolute score to impact level."""
+    if abs_score >= 5:
+        return 'HIGH'
+    elif abs_score >= 2:
+        return 'MEDIUM'
+    else:
+        return 'LOW'
+
+
+def _calculate_confidence(event, impact_result) -> int:
+    """Calculate confidence score (0-100) based on data availability."""
+    confidence = 50  # Base confidence
+
+    # Increase confidence if we have forecast data
+    if event.forecast:
+        confidence += 15
+
+    # Increase confidence if we have previous data
+    if event.previous:
+        confidence += 10
+
+    # Increase confidence based on impact result confidence
+    if hasattr(impact_result, 'confidence_score'):
+        confidence = int((confidence + impact_result.confidence_score) / 2)
+
+    # Cap at 70 for pre-event analysis (no actual data yet)
+    return min(confidence, 70)
+
+
+def _generate_thai_reasoning(event, classification, composite_score, bias, impact_result) -> str:
+    """
+    Generate Thai-language reasoning using Gemini.
+    AI is used ONLY for language formatting, not for decision-making.
+    """
+    try:
+        # Build a factual prompt with all deterministic data
+        prompt = f"""คุณเป็น News Analyst มืออาชีพสำหรับตลาดทองคำ
+
+📰 ข่าวที่ต้องวิเคราะห์:
+- ชื่อข่าว: {event.title} ({event.title_th})
+- ประเทศ: {event.country}
+- หมวดหมู่: {classification.category.value}
+- ค่าคาดการณ์ (Forecast): {event.forecast or 'ไม่มี'}
+- ค่าก่อนหน้า (Previous): {event.previous or 'ไม่มี'}
+
+📊 ผลการคำนวณแบบ Deterministic (ไม่ใช้ AI):
+- คะแนนผลกระทบรวม: {composite_score:.1f}/10 ({bias})
+- ความสัมพันธ์กับทองคำ: {'บวก' if classification.gold_correlation > 0 else 'ลบ' if classification.gold_correlation < 0 else 'เป็นกลาง'}
+- ปัจจัยสำคัญ: {', '.join(classification.key_drivers[:3]) if classification.key_drivers else 'ไม่ระบุ'}
+
+🎯 งานของคุณ:
+เขียนคำอธิบายสั้นๆ 1-2 ประโยค เป็นภาษาไทย อธิบายว่า:
+1. ข่าวนี้มีผลกระทบต่อทองคำอย่างไร (ใช้รูปแบบ "หาก Actual > Forecast → ... หาก Actual < Forecast → ...")
+2. ทำไมถึงได้คะแนน {composite_score:.1f}/10
+
+⚠️ กฎสำคัญ:
+- อย่าฟันธงทิศทางก่อนตัวเลขออก
+- ใช้รูปแบบ "หาก...→..." เสมอสำหรับข่าวที่ยังไม่ประกาศ
+- อธิบายเหตุผลสั้นๆ กระชับ
+
+💡 ตัวอย่าง:
+"CPI: หาก Actual สูงกว่า Forecast → เงินเฟ้อสูง → เฟดขึ้นดอกเบี้ย → 📉 ทองลง | หาก Actual ต่ำกว่า Forecast → 📈 ทองขึ้น"
+
+📤 ตอบเฉพาะคำอธิบาย 1-2 ประโยคเท่านั้น:"""
+
+        # Call Gemini for Thai formatting only
+        response = call_gemini(prompt, max_tokens=200)
+
+        if response:
+            # Clean up the response
+            reasoning = response.strip()
+            # Remove common prefixes
+            for prefix in ['REASONING:', 'คำอธิบาย:', 'ผลการวิเคราะห์:']:
+                if reasoning.startswith(prefix):
+                    reasoning = reasoning[len(prefix):].strip()
+            return reasoning
+
+    except Exception as e:
+        logger.error(f"Error generating Thai reasoning: {e}")
+
+    # Fallback to deterministic template-based reasoning
+    return _fallback_thai_reasoning(event, classification, bias)
+
+
+def _fallback_thai_reasoning(event, classification, bias) -> str:
+    """Generate Thai reasoning using templates when Gemini fails."""
+    category_templates = {
+        'inflation': f"{event.title_th}: หาก Actual สูงกว่า Forecast → เงินเฟ้อสูง → เฟดขึ้นดอกเบี้ย → 📉 ทองลง | หากต่ำกว่า → 📈 ทองขึ้น",
+        'labor': f"{event.title_th}: หาก Actual สูงกว่า Forecast (จ้างงานดี) → USD แข็ง → 📉 ทองลง | หากต่ำกว่า → 📈 ทองขึ้น",
+        'fed_policy': f"{event.title_th}: หากขึ้นดอกเบี้ย → USD แข็ง → 📉 ทองลง | หากคง/ลด → 📈 ทองขึ้น",
+        'growth': f"{event.title_th}: หาก Actual สูงกว่า Forecast (เศรษฐกิจดี) → USD แข็ง → 📉 ทองลง | หากต่ำกว่า → 📈 ทองขึ้น",
+        'consumer': f"{event.title_th}: หาก Actual สูงกว่า Forecast → ผู้บริโภคมั่นใจ → USD แข็ง → 📉 ทองลง | หากต่ำกว่า → 📈 ทองขึ้น",
+        'manufacturing': f"{event.title_th}: หาก Actual สูงกว่า Forecast → ภาคการผลิตขยาย → 📉 ทองลง | หากต่ำกว่า → 📈 ทองขึ้น",
+        'yields': f"{event.title_th}: หากผลตอบแทนพันธบัตรสูงขึ้น → USD แข็ง → 📉 ทองลง | หากลง → 📈 ทองขึ้น",
+        'geopolitics': f"{event.title_th}: ความไม่แน่นอนทางการเมือง → ทองเป็น safe haven → 📈 ทองขึ้น",
+    }
+
+    category = classification.category.value
+    return category_templates.get(
+        category,
+        f"{event.title_th}: หากข้อมูลดีกว่าคาด → USD แข็ง → 📉 ทองลง | หากแย่กว่าคาด → 📈 ทองขึ้น"
+    )
+
+
+def analyze_events_with_impact_engine(events: list, delay: float = 2.0) -> List[AnalysisResult]:
+    """
+    Analyze multiple events using the Event Impact Engine with rate limiting.
+
+    Args:
+        events: List of EconomicEvent objects
+        delay: Seconds to wait between API calls for Thai formatting
+
+    Returns list of AnalysisResult objects.
+    """
+    import time
+
+    results = []
+    for i, event in enumerate(events):
+        try:
+            result = analyze_event_with_impact_engine(event)
+            results.append(result)
+            # Rate limit: wait between API calls for Thai formatting, but not after the last one
+            if i < len(events) - 1:
+                time.sleep(delay)
+        except Exception as e:
+            logger.error(f"Error analyzing event {event.title} with impact engine: {e}")
+            # Fall back to standard analysis
+            try:
+                result = analyze_event(event)
+                results.append(result)
+            except Exception as e2:
+                logger.error(f"Fallback analysis also failed: {e2}")
+    return results
