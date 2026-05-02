@@ -231,14 +231,9 @@ def format_predictions_section(predictions: List[PredictionMarket],
 
         message += "\n"
 
-    # Add beginner explanation at the bottom
+    # Add disclaimer at the bottom
     message += (
-        f"💡 <b>อ่านยังไง?</b>\n"
-        f"Polymarket คือตลาดที่คนทั่วโลกมา \"เดิมพัน\" ว่าเหตุการณ์ต่างๆ จะเกิดขึ้นหรือไม่\n"
-        f"• ถ้าคนส่วนใหญ่เชื่อว่า Fed จะขึ้นดอกเบี้ย → % ของ \"ขึ้น\" จะสูง\n"
-        f"• ถ้า % สูง = ตลาดมองว่ามีโอกาสเกิดสูง\n"
-        f"• ทองคำมัก <b>ขึ้น</b> เมื่อ Fed ลดดอกเบี้ย หรือเศรษฐกิจแย่\n"
-        f"• ทองคำมัก <b>ลง</b> เมื่อ Fed ขึ้นดอกเบี้ย หรือเศรษฐกิจดี\n"
+        f"<i>⚠️ ข้อมูลนี้เป็นการคาดการณ์ ไม่ใช่คำแนะนำในการลงทุน</i>\n"
     )
 
     return message

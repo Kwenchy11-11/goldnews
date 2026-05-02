@@ -35,16 +35,18 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
     """
     Calculate gold sentiment score based on market relationships.
     
-    Scoring:
-    - Fed rate cut probability UP = +25 points (weaker USD → gold up)
-    - Fed rate hike/no-cut probability UP = -25 points (stronger USD → gold down)
-    - Ceasefire probability DOWN (war continues) = +20 points (bullish)
-    - Oil price UP = +15 points (inflation/war hedge)
-    - Gold price target UP = +30 points (direct bullish)
+    Dynamic Scoring:
+    - Score is normalized to -100..+100 based ONLY on categories that have data
+    - Missing categories are NEVER included in the average (no score dilution)
+    - If only Fed data exists, score = Fed score scaled to -100..+100
     
-    Total range: -100 to +100
+    Category max contributions (raw):
+    - Fed: ±25   → scaled to ±100 relative to all active categories
+    - Ceasefire: ±20
+    - Oil: ±15
+    - Gold Target: ±30
     
-    If only Fed data is available, calculate from Fed alone.
+    Final = (sum(raw_scores) / sum(max_possible)) * 100
     """
     score = 0
     reasons = []
@@ -79,15 +81,21 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
         if 'gold' in q_lower and any(kw in q_lower for kw in ['above', 'below', '$', 'target']):
             gold_target_market = market
     
+    # ---- Track active categories for dynamic normalization ----
+    has_fed = len(fed_markets) > 0
+    has_ceasefire = ceasefire_market is not None
+    has_oil = oil_market is not None
+    has_gold_target = gold_target_market is not None
+    
     # Analyze Fed Markets (most important - always available)
-    if fed_markets:
+    if has_fed:
         data_sources += 1
         fed_score = _analyze_fed_sentiment(fed_markets)
         score += fed_score['score']
         reasons.extend(fed_score['reasons'])
     
     # Analyze Ceasefire (Geopolitics)
-    if ceasefire_market:
+    if has_ceasefire:
         data_sources += 1
         outcomes = _get_attr(ceasefire_market, 'outcomes', [])
         yes_prob = None
@@ -101,13 +109,13 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
         if yes_prob is not None:
             if yes_prob < 40:
                 score += 20
-                reasons.append(f"🟢 โอกาสหยุดยิงต่ำ ({yes_prob:.0f}%) = สงครามยังดำเนิน")
+                reasons.append(f"🟢 หยุดยิงต่ำ ({yes_prob:.0f}%) → สงครามต่อ → Safe Haven → ทองขึ้น 📈")
             elif yes_prob > 60:
                 score -= 20
-                reasons.append(f"🔴 โอกาสหยุดยิงสูง ({yes_prob:.0f}%) = สันติภาพใกล้")
+                reasons.append(f"🔴 หยุดยิงสูง ({yes_prob:.0f}%) → สงบ → Risk-On → ทองลง 📉")
     
     # Analyze Oil
-    if oil_market:
+    if has_oil:
         data_sources += 1
         outcomes = _get_attr(oil_market, 'outcomes', [])
         for outcome in outcomes:
@@ -116,15 +124,15 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
             price_pct = price * 100
             if any(kw in name for kw in ['up', 'above', 'higher', 'ขึ้น']) and price_pct > 50:
                 score += 15
-                reasons.append(f"🟢 น้ำมันแนวโน้มขึ้น ({price_pct:.0f}%) = เงินเฟ้อ/สงคราม")
+                reasons.append(f"🟢 น้ำมันขึ้น ({price_pct:.0f}%) → เงินเฟ้อสูง → ทองขึ้น 📈")
                 break
             if any(kw in name for kw in ['down', 'below', 'lower', 'ลง']) and price_pct > 50:
                 score -= 15
-                reasons.append(f"🔴 น้ำมันแนวโน้มลง ({price_pct:.0f}%) = สงบ")
+                reasons.append(f"🔴 น้ำมันลง ({price_pct:.0f}%) → เงินเฟ้อลด → ทองลง 📉")
                 break
     
     # Analyze Gold Target
-    if gold_target_market:
+    if has_gold_target:
         data_sources += 1
         outcomes = _get_attr(gold_target_market, 'outcomes', [])
         for outcome in outcomes:
@@ -133,17 +141,49 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
             price_pct = price * 100
             if any(kw in name for kw in ['above', 'higher', 'break', 'ขึ้น', 'เกิน']) and price_pct > 50:
                 score += 30
-                reasons.append(f"🟢 ทองคำทะลุเป้า ({price_pct:.0f}%) = Bullish")
+                reasons.append(f"🟢 ทองถึงเป้า ({price_pct:.0f}%) → เชื่อมั่นสูง → ทองขึ้นต่อ 📈")
                 break
             if any(kw in name for kw in ['below', 'lower', 'under', 'ต่ำกว่า']) and price_pct > 50:
                 score -= 30
-                reasons.append(f"🔴 ทองคำไม่ทะลุเป้า ({price_pct:.0f}%) = Bearish")
+                reasons.append(f"🔴 ทองไม่ถึงเป้า ({price_pct:.0f}%) → เชื่อมั่นต่ำ → ทองลง 📉")
                 break
     
-    # Determine label based on score
-    if score >= 30:
+    # ============================================================
+    # DYNAMIC NORMALIZATION: Normalize score based on active categories
+    # ------------------------------------------------------------
+    # Each category has a max absolute contribution:
+    #   Fed:       25   (from _analyze_fed_sentiment)
+    #   Ceasefire: 20
+    #   Oil:       15
+    #   Gold Tgt:  30
+    # Total max possible across ALL 4 categories = 90
+    #
+    # We normalize: final_score = (raw_score / max_possible) * 100
+    # This ensures score is always -100 to +100 regardless of
+    # which categories have data available.
+    # ============================================================
+    max_possible = 0
+    if has_fed:
+        max_possible += 25
+    if has_ceasefire:
+        max_possible += 20
+    if has_oil:
+        max_possible += 15
+    if has_gold_target:
+        max_possible += 30
+    
+    if max_possible > 0:
+        normalized_score = (score / max_possible) * 100
+    else:
+        normalized_score = 0
+    
+    # Clamp to -100..+100
+    normalized_score = max(-100, min(100, normalized_score))
+    
+    # Strict thresholds for FOMC-day clarity
+    if normalized_score >= 10:
         label = "Bullish 🟢"
-    elif score <= -30:
+    elif normalized_score <= -10:
         label = "Bearish 🔴"
     else:
         label = "Neutral ⚪"
@@ -163,7 +203,7 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
         reasoning = "\n".join(reasons)
         if missing_data_warnings:
             reasoning += "\n\n<b>ข้อมูลขาดหาย:</b>\n" + "\n".join(missing_data_warnings)
-            reasoning += f"\n\n<i>คำนวณจาก {data_sources} แหล่งข้อมูล</i>"
+            reasoning += f"\n\n<i>คำนวณจาก {data_sources} หมวดหมู่ (ปรับขนาดตามสัดส่วน)</i>"
     else:
         if missing_data_warnings:
             reasoning = "<b>⚠️ ไม่พบข้อมูลเพียงพอสำหรับประเมิน</b>\n\n" + "\n".join(missing_data_warnings)
@@ -172,7 +212,7 @@ def calculate_gold_sentiment(markets: List[Any]) -> SentimentResult:
             reasoning = "📊 ไม่พบข้อมูลเพียงพอสำหรับประเมิน"
     
     return SentimentResult(
-        score=max(-100, min(100, score)),
+        score=int(round(normalized_score)),
         label=label,
         reasoning=reasoning
     )
@@ -195,11 +235,6 @@ def _analyze_fed_sentiment(fed_markets: List[Any]) -> Dict:
     for market in fed_markets:
         question = market.question.lower() if not isinstance(market, dict) else market.get('question', '').lower()
         outcomes = _get_attr(market, 'outcomes', [])
-        volume = _get_attr(market, 'volume', 0)
-        
-        # Skip very low volume markets
-        if volume < 100000:
-            continue
         
         # Determine what this market is asking
         is_no_cuts_question = 'no' in question and ('cut' in question or 'cuts' in question)
@@ -228,17 +263,17 @@ def _analyze_fed_sentiment(fed_markets: List[Any]) -> Dict:
             # High "Yes" = no cuts = bearish for gold
             if yes_prob > 60:
                 score -= 25
-                reasons.append(f"🔴 ตลาดมั่นใจเฟดไม่ลดดอกเบี้ย ({yes_prob:.0f}%) = USD แข็ง")
+                reasons.append(f"🔴 ไม่ลดดอกเบี้ยสูง ({yes_prob:.0f}%) → USD แข็ง → ทองลง 📉")
             elif yes_prob < 40:
                 score += 25
-                reasons.append(f"🟢 ตลาดมองเฟดจะลดดอกเบี้ย ({100-yes_prob:.0f}%) = USD อ่อน")
+                reasons.append(f"🟢 ไม่ลดดอกเบี้ยต่ำ ({yes_prob:.0f}%) → มีโอกาสลด → USD อ่อน → ทองขึ้น 📈")
             else:
-                score -= 10
-                reasons.append(f"🟡 ตลาดแบ่งครึ่งเรื่องไม่ลดดอกเบี้ย ({yes_prob:.0f}%) = ไม่ชัดเจน")
+                score -= 3
+                reasons.append(f"🟡 ไม่ลดดอกเบี้ยก้ำกึ่ง ({yes_prob:.0f}%) → โน้ม Bearish เล็กน้อย")
         
         elif is_cuts_question:
             # "Will Fed cut rates 6 times?" → Yes=1% means almost no chance of 6 cuts
-            # Extract number of cuts
+            # Extract number of cuts (English question may not have a number)
             cuts_match = re.search(r'(\d+)\s*(?:times|ครั้ง|cuts)', question)
             num_cuts = int(cuts_match.group(1)) if cuts_match else 0
             
@@ -246,51 +281,41 @@ def _analyze_fed_sentiment(fed_markets: List[Any]) -> Dict:
                 # Many cuts expected → if Yes is low, that's bearish
                 if yes_prob < 20:
                     score -= 20
-                    reasons.append(f"🔴 โอกาสลดดอกเบี้ย {num_cuts} ครั้งต่ำมาก ({yes_prob:.0f}%) = USD แข็ง")
+                    reasons.append(f"🔴 โอกาสลด {num_cuts} ครั้งต่ำมาก ({yes_prob:.0f}%) → USD ไม่อ่อน → ทองลง 📉")
                 elif yes_prob > 60:
                     score += 20
-                    reasons.append(f"🟢 โอกาสลดดอกเบี้ย {num_cuts} ครั้งสูง ({yes_prob:.0f}%) = USD อ่อน")
+                    reasons.append(f"🟢 โอกาสลด {num_cuts} ครั้งสูง ({yes_prob:.0f}%) → USD อ่อนมาก → ทองขึ้น 📈")
             else:
-                # Few cuts (1-2) → if Yes is high, that's slightly bullish
+                # Few cuts or unknown count → if Yes is high, slightly bullish
                 if yes_prob > 60:
                     score += 15
-                    reasons.append(f"🟢 โอกาสลดดอกเบี้ย {num_cuts} ครั้งสูง ({yes_prob:.0f}%) = USD อ่อน")
-                elif yes_prob < 20:
+                    label = f"ลด {num_cuts} ครั้ง" if num_cuts else "ลดดอกเบี้ย"
+                    reasons.append(f"🟢 โอกาส{label}สูง ({yes_prob:.0f}%) → USD อ่อน → ทองขึ้น 📈")
+                elif yes_prob <= 20:
                     score -= 15
-                    reasons.append(f"🔴 โอกาสลดดอกเบี้ย {num_cuts} ครั้งต่ำ ({yes_prob:.0f}%) = USD แข็ง")
+                    label = f"ลด {num_cuts} ครั้ง" if num_cuts else "ลดดอกเบี้ย"
+                    reasons.append(f"🔴 โอกาส{label}ต่ำ ({yes_prob:.0f}%) → USD แข็ง → ทองลง 📉")
         
         elif is_hike_question:
             # "Will Fed hike rates?" → Yes=high is bearish for gold
             if yes_prob > 60:
                 score -= 25
-                reasons.append(f"🔴 ตลาดมั่นใจเฟดขึ้นดอกเบี้ย ({yes_prob:.0f}%) = USD แข็งแรง")
+                reasons.append(f"🔴 ขึ้นดอกเบี้ยสูง ({yes_prob:.0f}%) → USD แข็งแรง → ทองลงแรง 📉")
             elif yes_prob < 20:
                 score += 15
-                reasons.append(f"🟢 โอกาสเฟดขึ้นดอกเบี้ยต่ำ ({yes_prob:.0f}%) = ไม่กดดันทอง")
+                reasons.append(f"🟢 โอกาสขึ้นดอกเบี้ยต่ำ ({yes_prob:.0f}%) → ไม่กดดันทอง → ทองขึ้น 📈")
     
-    # Average the score across all Fed markets (don't stack too much)
+    # Average the score across all Fed markets (prevent double-counting)
     if len(fed_markets) > 1:
-        score = score / min(len(fed_markets), 3)  # Cap at 3 markets for averaging
+        score = score / len(fed_markets)
     
     return {'score': int(score), 'reasons': reasons}
 
 
 def format_sentiment_message(result: SentimentResult) -> str:
     """Format sentiment result for Telegram."""
-    # Create visual bar
-    abs_score = abs(result.score)
-    filled = int(abs_score / 5)
-    empty = 20 - filled
-    
-    if result.score >= 0:
-        bar = '█' * filled + '░' * empty
-    else:
-        bar = '░' * empty + '█' * filled
-    
     return (
         f"📊 <b>Gold Sentiment Score</b>\n"
-        f"<code>{bar}</code>\n"
-        f"คะแนน: {result.score:+.0f}/100\n"
-        f"แนวโน้ม: <b>{result.label}</b>\n\n"
+        f"คะแนน: {result.score:+.0f}/100 | แนวโน้ม: <b>{result.label}</b>\n\n"
         f"{result.reasoning}"
     )
