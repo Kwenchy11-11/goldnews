@@ -18,9 +18,11 @@ import json
 import re
 from typing import List, Dict, Optional
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 import requests
 from dotenv import load_dotenv
+import pytz
 
 import config
 import alert_monitor
@@ -657,14 +659,23 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
         prices = price_monitor.get_current_prices()
         price_line = price_monitor.format_price_line(prices)
 
-    # Calculate Gold Sentiment Score
+    # Group markets and determine what will be DISPLAYED (top 3 per category)
+    by_category = get_predictions_by_category(predictions)
+    display_categories = ['fed', 'gold', 'geopolitics', 'inflation', 'energy', 'crypto']
+    
+    displayed_markets = []
+    for category in display_categories:
+        if category in by_category:
+            displayed_markets.extend(by_category[category][:3])
+
+    # Calculate Gold Sentiment Score from DISPLAYED markets only
     market_dicts = [
         {
             'question': p.question,
             'outcomes': p.outcomes,
             'category': p.category,
         }
-        for p in predictions
+        for p in displayed_markets
     ]
     sentiment = gold_sentiment.calculate_gold_sentiment(market_dicts)
     sentiment_msg = gold_sentiment.format_sentiment_message(sentiment)
@@ -682,10 +693,6 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
         "<i>ตัวเลข % = ความน่าจะเป็นที่ตลาดคาดการณ์</i>\n"
         "<i>🟢 = มีโอกาสสูง | 🟡 = เป็นไปได้ | 🔴 = โอกาสน้อย</i>\n\n"
     )
-
-    by_category = get_predictions_by_category(predictions)
-    # Show all 6 categories in priority order
-    display_categories = ['fed', 'gold', 'geopolitics', 'inflation', 'energy', 'crypto']
 
     for category in display_categories:
         cat_info = CATEGORY_INFO.get(category, {})
@@ -710,12 +717,8 @@ def format_predictions_message(predictions: List[PredictionMarket], include_pric
         message += "\n"
 
     message += (
-        f"💡 <b>อ่านยังไง?</b>\n"
-        f"Polymarket คือตลาดที่คนทั่วโลกมา \"เดิมพัน\" ว่าเหตุการณ์ต่างๆ จะเกิดขึ้นหรือไม่\n"
-        f"• ถ้า % สูง = ตลาดมองว่ามีโอกาสเกิดสูง\n"
-        f"• ทองคำมัก <b>ขึ้น</b> เมื่อ Fed ลดดอกเบี้ย หรือเศรษฐกิจแย่\n"
-        f"• ทองคำมัก <b>ลง</b> เมื่อ Fed ขึ้นดอกเบี้ย หรือเศรษฐกิจดี\n\n"
-        f"<i>ข้อมูลนี้เป็นการคาดการณ์ล่วงหน้า ไม่ใช่ข่าวที่เกิดขึ้นแล้ว</i>"
+        f"<i>⚠️ ข้อมูลนี้เป็นการคาดการณ์ล่วงหน้า ไม่ใช่คำแนะนำในการลงทุน</i>\n"
+        f"<i>💡 ดูวิธีอ่าน % แต่ละหมวดได้ที่ /help</i>"
     )
 
     return message
@@ -803,7 +806,27 @@ def handle_help_command(chat_id: int) -> bool:
         "🎯 <b>/predictions</b> — ดูตลาดคาดการณ์ Polymarket\n"
         "🔔 <b>/alerts</b> — ดูสถานะ auto alert\n"
         "❓ <b>/help</b> — แสดงคำสั่งทั้งหมด\n\n"
-        "<i>บอทนี้แสดงเฉพาะข้อมูลคาดการณ์จาก Polymarket เท่านั้น</i>\n"
+        "──────────────────────\n"
+        "💡 <b>วิธีอ่าน % แต่ละหมวด vs ราคาทอง</b>\n\n"
+        "🏦 <b>ดอกเบี้ยเฟด:</b>\n"
+        f"• % 'ไม่ลดดอกเบี้ย' สูง → USD แข็ง → ทอง <b>ลง</b> 📉\n"
+        f"• % 'ลดดอกเบี้ย' สูง → USD อ่อน → ทอง <b>ขึ้น</b> 📈\n\n"
+        f"⚔️ <b>ภูมิรัฐศาสตร์/สงคราม:</b>\n"
+        f"• % 'หยุดยิง' สูง → สงบ → Risk-On → ทองอาจ <b>ลง</b> 📉\n"
+        f"• % 'หยุดยิง' ต่ำ → สงคราม → Safe Haven → ทองมัก <b>ขึ้น</b> 📈\n\n"
+        f"⛽ <b>น้ำมัน/พลังงาน:</b>\n"
+        f"• % 'น้ำมันขึ้น' สูง → เงินเฟ้อสูง → ทองมัก <b>ขึ้น</b> 📈\n"
+        f"• % 'น้ำมันลง' สูง → เงินเฟ้อลด → ทองอาจ <b>ลง</b> 📉\n\n"
+        f"🥇 <b>ราคาทอง:</b>\n"
+        f"• % 'ทองถึงเป้า' สูง → เชื่อมั่นสูง → แนวโน้ม <b>ดี</b> 📈\n"
+        f"• % 'ทองไม่ถึงเป้า' สูง → เชื่อมั่นต่ำ → แนวโน้ม <b>ไม่ดี</b> 📉\n\n"
+        f"💰 <b>เงินเฟ้อ:</b>\n"
+        f"• % เงินเฟ้อสูง → ทองมัก <b>ขึ้น</b> (ป้องกันค่าเงิน) 📈\n"
+        f"• % เงินเฟ้อต่ำ → ทองอาจ <b>ลง</b> 📉\n\n"
+        "📊 <b>Gold Sentiment Score</b> คือคะแนนรวม -100 ถึง +100\n"
+        "คำนวณจากทุกหมวดที่มีข้อมูล สะท้อนทิศทางทองโดยรวม\n\n"
+        "──────────────────────\n"
+        "<i>บอทนี้แสดงเฉพาะข้อมูลคาดการณ์จาก Polymarket</i>\n"
         "<i>สำหรับข่าวทองคำอัตโนมัติ ใช้ @GoldNews_mifibot</i>"
     )
     return send_message(message, chat_id=chat_id)
@@ -874,43 +897,75 @@ def process_update(update: dict) -> bool:
 
 
 def auto_push_predictions():
-    """Auto-push predictions every hour and check for significant changes."""
+    """
+    Auto-push predictions once per day at configured time (Thai timezone).
+
+    Checks every minute if it's time to send the daily update.
+    Sends at PREDICTIONS_DAILY_TIME (default 08:00) Thailand time.
+    """
     import threading
 
     def _run():
+        last_sent_date = None
+        thai_tz = pytz.timezone('Asia/Bangkok')
+
+        logger.info(f"Auto-push scheduler started (daily at {config.PREDICTIONS_DAILY_TIME} Thai time)")
+
         while True:
             try:
-                # Wait 1 hour (3600 seconds)
-                time.sleep(3600)
+                # Get current time in Thailand
+                now = datetime.now(thai_tz)
+                today_str = now.strftime('%Y-%m-%d')
+                current_time = now.strftime('%H:%M')
 
-                logger.info("Auto-push: Fetching predictions...")
-                predictions = fetch_polymarket_predictions()
+                # Parse target time from config
+                target_time = config.PREDICTIONS_DAILY_TIME
 
-                if not predictions:
-                    logger.info("Auto-push: No predictions to send")
-                    continue
+                # Check if it's time to send (and we haven't sent today)
+                if current_time == target_time and last_sent_date != today_str:
+                    if not config.PREDICTIONS_DAILY_PUSH_ENABLED:
+                        logger.info("Daily push is disabled, skipping")
+                        last_sent_date = today_str  # Mark as sent so we don't retry
+                        time.sleep(60)
+                        continue
 
-                # Check for significant changes (>5%)
-                changes = price_monitor.check_significant_changes(predictions, threshold=5.0)
+                    logger.info(f"Daily push time reached ({target_time}), fetching predictions...")
+                    predictions = fetch_polymarket_predictions()
 
-                if changes:
-                    # Send emergency alert
-                    prices = price_monitor.get_current_prices()
-                    alert_msg = price_monitor.format_emergency_alert(changes, prices)
-                    send_message(alert_msg)
-                    logger.info(f"Emergency alert sent: {len(changes)} significant changes")
+                    if not predictions:
+                        logger.info("Daily push: No predictions to send")
+                        last_sent_date = today_str
+                        time.sleep(60)
+                        continue
 
-                # Send regular predictions update
-                message = format_predictions_message(predictions)
-                send_message(message)
-                logger.info("Auto-push: Predictions sent")
+                    # Check for significant changes (>5%)
+                    changes = price_monitor.check_significant_changes(predictions, threshold=5.0)
+
+                    if changes:
+                        # Send emergency alert for significant changes
+                        prices = price_monitor.get_current_prices()
+                        alert_msg = price_monitor.format_emergency_alert(changes, prices)
+                        send_message(alert_msg)
+                        logger.info(f"Emergency alert sent: {len(changes)} significant changes")
+
+                    # Send regular predictions update
+                    message = format_predictions_message(predictions)
+                    send_message(message)
+                    logger.info(f"Daily push: Predictions sent at {current_time}")
+
+                    # Mark as sent for today
+                    last_sent_date = today_str
+
+                # Sleep for 1 minute before checking again
+                time.sleep(60)
 
             except Exception as e:
                 logger.error(f"Auto-push error: {e}", exc_info=True)
+                time.sleep(60)  # Wait 1 minute before retrying
 
-    thread = threading.Thread(target=_run, daemon=True, name="AutoPush")
+    thread = threading.Thread(target=_run, daemon=True, name="AutoPushDaily")
     thread.start()
-    logger.info("Auto-push scheduler started (every 1 hour)")
+    logger.info(f"Auto-push scheduler started (daily at {config.PREDICTIONS_DAILY_TIME} Thai time)")
 
 
 def start_bot():
@@ -925,7 +980,7 @@ def start_bot():
     logger.info(" Gold Predictions Bot")
     logger.info("=" * 50)
     logger.info("Commands: /predictions, /alerts, /help, /start")
-    logger.info("Features: Auto-push every 1 hour, Emergency alerts on 5%+ changes")
+    logger.info(f"Features: Daily auto-push at {config.PREDICTIONS_DAILY_TIME} Thai time, Emergency alerts on 5%+ changes")
 
     # Get initial offset (skip old messages)
     updates = get_updates(timeout=1)
