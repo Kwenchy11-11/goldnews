@@ -470,3 +470,380 @@ def format_daily_summary(analyses: List[AnalysisResult],
     message += f"\n{'─' * 30}\n<i>🔄 ตรวจสอบใหม่ใน {config.CHECK_INTERVAL} นาที</i>"
 
     return message
+
+
+# ============================================================================
+# EVENT IMPACT ENGINE FORMATTERS
+# ============================================================================
+# Formatters for displaying Event Impact Engine results in Telegram messages.
+# Shows deterministic impact scores, layer breakdowns, and alert recommendations.
+
+
+def get_impact_strength_emoji(score: float) -> str:
+    """Return emoji based on composite impact score (-10 to +10)."""
+    if score >= 7:
+        return "🔴📈"  # Strong bullish
+    elif score >= 4:
+        return "🟠📈"  # Moderate bullish
+    elif score >= 2:
+        return "🟡📈"  # Weak bullish
+    elif score > -2:
+        return "⚪"     # Neutral
+    elif score > -4:
+        return "🟡📉"  # Weak bearish
+    elif score > -7:
+        return "🟠📉"  # Moderate bearish
+    else:
+        return "🔴📉"  # Strong bearish
+
+
+def get_alert_priority_emoji(priority: str) -> str:
+    """Return emoji for alert priority level."""
+    return {
+        'immediate': '🚨',
+        'high': '⚠️',
+        'normal': 'ℹ️',
+        'low': '💡',
+    }.get(priority.lower(), 'ℹ️')
+
+
+def format_impact_score_bar(score: float, width: int = 20) -> str:
+    """
+    Create a visual bar representation of impact score (-10 to +10).
+    
+    Args:
+        score: Composite score from -10 to +10
+        width: Width of the bar in characters
+        
+    Returns:
+        String representing the score visually
+    """
+    # Normalize score to 0-width range
+    normalized = (score + 10) / 20  # Now 0 to 1
+    filled = int(normalized * width)
+    
+    bar = "[" + "█" * filled + "░" * (width - filled) + "]"
+    return f"{bar} {score:+.1f}"
+
+
+def format_event_impact_result(result) -> str:
+    """
+    Format an EventImpactResult for Telegram display.
+    
+    Shows composite score, alert recommendation, and layer breakdown.
+    
+    Args:
+        result: EventImpactResult from the impact engine
+        
+    Returns:
+        Formatted Thai message string
+    """
+    from src.core.event_impact_engine import EventImpactResult
+    
+    impact_emoji = get_impact_strength_emoji(result.composite_score)
+    alert_emoji = get_alert_priority_emoji(result.alert_priority)
+    
+    # Convert category to Thai
+    category_thai = {
+        'inflation': 'เงินเฟ้อ',
+        'labor': 'ตลาดแรงงาน',
+        'fed_policy': 'นโยบายเฟด',
+        'growth': 'การเติบโต',
+        'yields': 'ผลตอบแทนพันธบัตร',
+        'geopolitics': 'ภูมิรัฐศาสตร์',
+        'consumer': 'ผู้บริโภค',
+        'manufacturing': 'การผลิต',
+        'unknown': 'อื่นๆ',
+    }.get(result.category.value if hasattr(result.category, 'value') else str(result.category), 'อื่นๆ')
+    
+    # Overall gold impact to Thai
+    impact_thai = {
+        'strong-bullish': 'ทองขึ้นแรงมาก',
+        'bullish': 'ทองขึ้น',
+        'neutral': 'เป็นกลาง',
+        'bearish': 'ทองลง',
+        'strong-bearish': 'ทองลงแรงมาก',
+    }.get(result.overall_gold_impact, result.overall_gold_impact)
+    
+    # Build message
+    message = (
+        f"{impact_emoji} <b>{result.event_name}</b>\n"
+        f"{'─' * 30}\n"
+        f"📂 หมวดหมู่: {category_thai}\n"
+        f"🎯 ผลกระทบ: {impact_thai}\n"
+        f"📊 คะแนนรวม: {format_impact_score_bar(result.composite_score)}\n"
+        f"🎲 ความมั่นใจ: {int(result.confidence_score * 100)}%\n"
+    )
+    
+    # Add alert recommendation if significant
+    if result.should_alert:
+        priority_thai = {
+            'immediate': 'ทันที',
+            'high': 'สูง',
+            'normal': 'ปกติ',
+            'low': 'ต่ำ',
+        }.get(result.alert_priority, result.alert_priority)
+        
+        message += f"\n{alert_emoji} <b>แนะนำให้แจ้งเตือน</b> (ระดับ: {priority_thai})\n"
+        if result.alert_message:
+            message += f"💬 {html.escape(result.alert_message)}\n"
+    
+    message += f"{'─' * 30}\n"
+    return message
+
+
+def format_impact_layer_breakdown(result) -> str:
+    """
+    Format a detailed layer-by-layer breakdown of impact calculation.
+    
+    Args:
+        result: EventImpactResult from the impact engine
+        
+    Returns:
+        Formatted message showing each layer's contribution
+    """
+    message = (
+        f"🔍 <b>รายละเอียดการคำนวณ</b>\n"
+        f"{'─' * 30}\n"
+    )
+    
+    # Layer 1: Classification
+    if hasattr(result, 'impact_score') and result.impact_score:
+        impact = result.impact_score
+        message += (
+            f"📂 <b>Layer 1: จัดหมวดหมู่</b>\n"
+            f"   หมวด: {impact.category.value if hasattr(impact.category, 'value') else impact.category}\n"
+            f"   คะแนนพื้นฐาน: {impact.base_impact_score}/10\n"
+            f"   สัมพันธ์ทองคำ: {'📈' if impact.gold_correlation > 0 else '📉' if impact.gold_correlation < 0 else '➡️'}\n"
+        )
+        if impact.key_drivers:
+            drivers = ', '.join(impact.key_drivers[:3])
+            message += f"   ปัจจัย: {drivers}\n"
+        message += "\n"
+    
+    # Layer 2: Surprise
+    if hasattr(result, 'surprise_result') and result.surprise_result:
+        surprise = result.surprise_result
+        message += (
+            f"🎲 <b>Layer 2: คำนวณ Surprise</b>\n"
+            f"   คะแนน: {surprise.surprise_score:+.1f}/10\n"
+            f"   ความเบี่ยงเบน: {surprise.deviation_pct:+.1f}%\n"
+            f"   ทิศทาง: {'📈' if surprise.direction == 'higher' else '📉' if surprise.direction == 'lower' else '➡️'}\n"
+            f"   ความสำคัญ: {surprise.significance}\n"
+        )
+        if surprise.gold_impact_estimate:
+            est = surprise.gold_impact_estimate
+            message += f"   ประมาณการทอง: {est.get('direction', 'neutral')} ({est.get('strength', 'unknown')})\n"
+        message += "\n"
+    
+    # Layer 3: Consensus
+    if hasattr(result, 'consensus_comparison') and result.consensus_comparison:
+        consensus = result.consensus_comparison
+        message += (
+            f"👥 <b>Layer 3: ความเห็นตลาด</b>\n"
+            f"   สัญญาณ: {consensus.trading_signal}\n"
+        )
+        if hasattr(consensus, 'divergence_score'):
+            message += f"   ความแตกต่าง: {consensus.divergence_score:.2f}\n"
+        if hasattr(consensus, 'agreement_level'):
+            message += f"   ระดับเห็นพ้อง: {consensus.agreement_level}\n"
+        message += "\n"
+    
+    # Composite calculation
+    message += (
+        f"🎯 <b>คะแนนรวม</b>\n"
+        f"   {format_impact_score_bar(result.composite_score)}\n"
+        f"   น้ำหนัก: Surprise 70% | Base 20% | Consensus 10%\n"
+    )
+    
+    return message
+
+
+def format_pre_event_alert(event_name: str, forecast, previous, category: str,
+                           event_time: datetime = None) -> str:
+    """
+    Format a pre-event alert message (15 minutes before event).
+    
+    Args:
+        event_name: Name of the economic event
+        forecast: Forecast value
+        previous: Previous value
+        category: Event category
+        event_time: When the event will be released
+        
+    Returns:
+        Formatted pre-event alert message
+    """
+    time_str = ""
+    if event_time:
+        time_str = f"⏰ เวลา: {event_time.strftime('%H:%M')} น.\n"
+    
+    # Get category in Thai
+    category_thai = {
+        'inflation': 'เงินเฟ้อ',
+        'labor': 'ตลาดแรงงาน',
+        'fed_policy': 'นโยบายเฟด',
+        'growth': 'การเติบโต',
+        'yields': 'ผลตอบแทนพันธบัตร',
+        'geopolitics': 'ภูมิรัฐศาสตร์',
+        'consumer': 'ผู้บริโภค',
+        'manufacturing': 'การผลิต',
+        'unknown': 'อื่นๆ',
+    }.get(category, category)
+    
+    message = (
+        f"⏳ <b>ข่าวสำคัญกำลังจะประกาศ</b> (อีก ~15 นาที)\n"
+        f"{'─' * 30}\n"
+        f"📰 {event_name}\n"
+        f"📂 หมวดหมู่: {category_thai}\n"
+        f"{time_str}"
+    )
+    
+    if forecast:
+        message += f"📊 คาดการณ์: {forecast}\n"
+    if previous:
+        message += f"📈 ก่อนหน้า: {previous}\n"
+    
+    message += (
+        f"\n⚠️ <b>เตรียมรับมือผลกระทบต่อทองคำ</b>\n"
+        f"{'─' * 30}"
+    )
+    
+    return message
+
+
+def format_post_event_alert(event_name: str, actual, forecast, previous,
+                            composite_score: float, alert_message: str = None) -> str:
+    """
+    Format a post-event alert message with actual results.
+    
+    Args:
+        event_name: Name of the economic event
+        actual: Actual released value
+        forecast: Forecast value
+        previous: Previous value
+        composite_score: Calculated impact score
+        alert_message: Optional custom alert message
+        
+    Returns:
+        Formatted post-event alert message
+    """
+    impact_emoji = get_impact_strength_emoji(composite_score)
+    
+    # Determine impact description
+    if composite_score >= 4:
+        impact_desc = "📈 มีผลบวกต่อทองคำ"
+    elif composite_score >= 2:
+        impact_desc = "📈 มีผลบวกเล็กน้อยต่อทองคำ"
+    elif composite_score > -2:
+        impact_desc = "➡️ ผลกระทบเป็นกลาง"
+    elif composite_score > -4:
+        impact_desc = "📉 มีผลลบเล็กน้อยต่อทองคำ"
+    else:
+        impact_desc = "📉 มีผลลบต่อทองคำ"
+    
+    message = (
+        f"🚨 <b>ข่าวสำคัญประกาศแล้ว!</b>\n"
+        f"{'─' * 30}\n"
+        f"{impact_emoji} <b>{event_name}</b>\n"
+        f"{'─' * 30}\n"
+    )
+    
+    # Show actual vs forecast
+    if actual and forecast:
+        try:
+            actual_val = float(str(actual).replace('%', '').replace('K', ''))
+            forecast_val = float(str(forecast).replace('%', '').replace('K', ''))
+            
+            if actual_val > forecast_val:
+                vs_str = f"📈 สูงกว่าคาด ({actual} vs {forecast})"
+            elif actual_val < forecast_val:
+                vs_str = f"📉 ต่ำกว่าคาด ({actual} vs {forecast})"
+            else:
+                vs_str = f"➡️ ตรงคาด ({actual})"
+            
+            message += f"{vs_str}\n"
+        except (ValueError, TypeError):
+            message += f"📊 Actual: {actual} | Forecast: {forecast}\n"
+    else:
+        if actual:
+            message += f"📊 Actual: {actual}\n"
+        if forecast:
+            message += f"📊 Forecast: {forecast}\n"
+    
+    if previous:
+        message += f"📈 Previous: {previous}\n"
+    
+    message += (
+        f"\n{impact_desc}\n"
+        f"📊 คะแนนผลกระทบ: {format_impact_score_bar(composite_score)}\n"
+    )
+    
+    if alert_message:
+        message += f"\n💬 {html.escape(alert_message)}\n"
+    
+    message += f"{'─' * 30}"
+    
+    return message
+
+
+def format_daily_impact_summary(results: list, date: datetime = None) -> str:
+    """
+    Format a daily summary of all impact analyses.
+    
+    Args:
+        results: List of EventImpactResult objects
+        date: Date for the summary (defaults to today)
+        
+    Returns:
+        Formatted daily summary message
+    """
+    if not results:
+        return "📋 ไม่มีข่าวสำคัญวันนี้"
+    
+    now = date or get_now_ict()
+    day_thai = config.DAY_THAI.get(now.weekday(), '')
+    
+    # Calculate summary stats
+    high_impact = [r for r in results if abs(r.composite_score) >= 5]
+    bullish = [r for r in results if r.composite_score >= 2]
+    bearish = [r for r in results if r.composite_score <= -2]
+    
+    message = (
+        f"📊 <b>สรุปผลกระทบข่าวเศรษฐกิจ</b>\n"
+        f"📅 {now.strftime('%d/%m/%Y')} ({day_thai})\n"
+        f"{'─' * 30}\n"
+        f"📈 กดดันขึ้น: {len(bullish)} รายการ\n"
+        f"📉 กดดันลง: {len(bearish)} รายการ\n"
+        f"🔴 ผลกระทบสูง: {len(high_impact)} รายการ\n"
+        f"{'─' * 30}\n\n"
+    )
+    
+    # Show each event
+    for i, result in enumerate(results, 1):
+        impact_emoji = get_impact_strength_emoji(result.composite_score)
+        alert_emoji = get_alert_priority_emoji(result.alert_priority) if result.should_alert else ""
+        
+        category_thai = {
+            'inflation': 'เงินเฟ้อ',
+            'labor': 'แรงงาน',
+            'fed_policy': 'เฟด',
+            'growth': 'เติบโต',
+            'yields': 'พันธบัตร',
+            'geopolitics': 'ภูมิรัฐศาสตร์',
+            'consumer': 'ผู้บริโภค',
+            'manufacturing': 'การผลิต',
+            'unknown': 'อื่นๆ',
+        }.get(
+            result.category.value if hasattr(result.category, 'value') else str(result.category),
+            'อื่นๆ'
+        )
+        
+        message += (
+            f"{i}. {impact_emoji} {result.event_name}"
+            f"{alert_emoji}\n"
+            f"   [{category_thai}] คะแนน: {result.composite_score:+.1f}\n"
+        )
+    
+    message += f"\n{'─' * 30}"
+    return message
