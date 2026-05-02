@@ -352,8 +352,46 @@ def format_event_item(analysis: AnalysisResult, index: int, is_released: bool) -
 
     message += (
         f"   ผลกระทบ: {impact_thai}\n"
-        f"   💡 {html.escape(analysis.reasoning)}\n\n"
+        f"   💡 {html.escape(analysis.reasoning)}\n"
     )
+
+    # Add trade decision if available
+    if hasattr(analysis, 'trade_decision') and analysis.trade_decision:
+        decision = analysis.trade_decision
+        decision_label = decision.get('decision_label', '')
+        confidence = decision.get('confidence', 0)
+        position_size = decision.get('position_size', 'none')
+        risk = decision.get('risk_level', 'unknown')
+
+        # Translate position size and risk to Thai
+        size_thai = {
+            'full': 'เต็มขนาด',
+            'half': 'ครึ่งขนาด',
+            'quarter': '1/4 ขนาด',
+            'none': 'ไม่เข้า'
+        }.get(position_size, position_size)
+
+        risk_thai = {
+            'low': 'ต่ำ',
+            'medium': 'ปานกลาง',
+            'high': 'สูง'
+        }.get(risk, risk)
+
+        # Only show actionable decisions or explicitly state NO_TRADE
+        actionable = decision.get('actionable', False)
+        if actionable:
+            message += f"   📊 สัญญาณ: {decision_label} (ความมั่นใจ {confidence:.0f}%)\n"
+            message += f"      ขนาด: {size_thai} | ความเสี่ยง: {risk_thai}\n"
+        else:
+            message += f"   ⚪ สัญญาณ: {decision_label} (ไม่เข้าเทรด)\n"
+
+        # Add warnings if any
+        warnings = decision.get('warnings', [])
+        if warnings:
+            for warning in warnings:
+                message += f"      ⚠️  {warning}\n"
+
+    message += "\n"
 
     return message
 

@@ -33,6 +33,7 @@ class AnalysisResult:
     forecast: str
     previous: str
     event_datetime: object = None  # Parsed datetime (ICT) for display
+    trade_decision: dict = None  # Trade recommendation from No Trade Zone engine
 
 
 @dataclass
@@ -656,6 +657,7 @@ def analyze_event_with_impact_engine(event) -> AnalysisResult:
         from src.core.event_classifier import classify_event
         from src.core.surprise_engine import EconomicDataPoint, calculate_surprise
         from src.core.consensus_engine import MarketConsensus
+        from src.core.trade_decision_engine import evaluate_trade_signal
 
         # Initialize the impact engine
         engine = EventImpactEngine()
@@ -705,6 +707,19 @@ def analyze_event_with_impact_engine(event) -> AnalysisResult:
         # Calculate confidence based on available data
         confidence = _calculate_confidence(event, impact_result)
 
+        # Step 6: Evaluate trade decision using No Trade Zone engine
+        try:
+            trade_rec = evaluate_trade_signal(
+                composite_score=composite_score,
+                surprise_result=impact_result.surprise_result,
+                consensus_comparison=impact_result.consensus_comparison,
+                category=classification.category,
+            )
+            trade_decision = trade_rec.to_dict()
+        except Exception as e:
+            logger.warning(f"Trade decision evaluation failed: {e}")
+            trade_decision = None
+
         return AnalysisResult(
             event_title=event.title,
             event_title_th=event.title_th,
@@ -716,6 +731,7 @@ def analyze_event_with_impact_engine(event) -> AnalysisResult:
             forecast=event.forecast,
             previous=event.previous,
             event_datetime=getattr(event, 'event_datetime', None),
+            trade_decision=trade_decision,
         )
 
     except Exception as e:
