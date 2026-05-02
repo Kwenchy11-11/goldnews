@@ -41,6 +41,8 @@ python3 main.py
 - **🔔 /alerts** — ดูสถานะ auto-alert
 - **🤖 AI วิเคราะห์** — คำอธิบาย beginner-friendly สำหรับมือใหม่
 - **🇹🇭 ภาษาไทย** — ทั้งคำถามและคำอธิบายเป็นไทย
+- **📅 Auto Push รายวัน** — ส่ง predictions อัตโนมัติทุกวัน เวลา 08:00 น. (เวลาไทย)
+- **🌏 Timezone ไทย** — ใช้ Asia/Bangkok (UTC+7) ทั้งหมด
 
 ### รัน Predictions Bot
 ```bash
@@ -49,6 +51,12 @@ python3 predictions_bot.py
 
 ### Auto Alert (optional)
 ถ้าเปิด `ENABLE_AUTO_ALERTS=true` จะส่ง alert เมื่อมีตลาดใหม่ในช่วง 20:30-21:30 น.
+
+### Daily Predictions Push (NEW!)
+- ส่ง predictions อัตโนมัติ **1 ครั้งต่อวัน เวลา 08:00 น.** (เวลาไทย)
+- ใช้ timezone `Asia/Bangkok` (UTC+7) ตลอด
+- ปรับเวลาได้ผ่าน `PREDICTIONS_DAILY_TIME` (เช่น `09:00` หรือ `07:30`)
+- ปิดได้ผ่าน `PREDICTIONS_DAILY_PUSH_ENABLED=false`
 
 ---
 
@@ -93,6 +101,10 @@ ALERT_CHECK_INTERVAL=5
 ALERT_WINDOW_START=20:30
 ALERT_WINDOW_END=21:30
 ALERT_VOLUME_THRESHOLD=10000
+
+# Daily Push Settings (NEW!)
+PREDICTIONS_DAILY_TIME=08:00              # เวลาส่งอัตโนมัติ (รูปแบบ HH:MM, เวลาไทย)
+PREDICTIONS_DAILY_PUSH_ENABLED=true      # เปิด/ปิดการส่งอัตโนมัติ
 ```
 
 ---
@@ -130,6 +142,21 @@ python3 -m pytest tests/ -v
 - **CNBC** — RSS news feed
 - **Polymarket** — Prediction markets
 - **Google Gemini** — AI analysis
+
+---
+
+## 🆕 Updates ล่าสุด
+
+### May 2026 — Daily Predictions Schedule + Thai Timezone
+- ✨ **เปลี่ยน auto-push จากทุกชั่วโมง → ทุกวันเวลา 08:00 น.**
+- ✨ **ใช้ timezone ไทย (Asia/Bangkok UTC+7)** ทั้งหมด
+- ✨ **เพิ่ม config ปรับเวลาส่งได้** (`PREDICTIONS_DAILY_TIME`)
+- ✨ **เพิ่ม pytz dependency** สำหรับจัดการ timezone
+
+### April 2026 — Predictions Display Fixes
+- 🔧 แก้ไขการแสดงผล predictions (แสดงคำถามภาษาอังกฤษพร้อมตัวเลข)
+- 🔧 ปรับปรุง Gold Sentiment Score calculation
+- 🔧 แก้ไข emoji และ formatting
 
 ---
 
