@@ -192,6 +192,24 @@ CATEGORY_THAI = {
     'unknown': 'อื่นๆ',
 }
 
+# Backtest Configuration
+# =============================================================================
+
+# Price fetcher settings
+BACKTEST_PRICE_CACHE_DAYS = int(os.getenv('BACKTEST_PRICE_CACHE_DAYS', '30'))
+BACKTEST_DEFAULT_TIMEFRAMES = os.getenv('BACKTEST_DEFAULT_TIMEFRAMES', '5,15,30,60')
+BACKTEST_PRE_EVENT_MINUTES = int(os.getenv('BACKTEST_PRE_EVENT_MINUTES', '15'))
+
+# Backtest thresholds
+BACKTEST_SCORE_THRESHOLD_TRADE = float(os.getenv('BACKTEST_SCORE_THRESHOLD_TRADE', '3.0'))
+BACKTEST_MOVE_THRESHOLD_SMALL = float(os.getenv('BACKTEST_MOVE_THRESHOLD_SMALL', '1.0'))
+BACKTEST_MOVE_THRESHOLD_MEDIUM = float(os.getenv('BACKTEST_MOVE_THRESHOLD_MEDIUM', '3.0'))
+BACKTEST_MOVE_THRESHOLD_LARGE = float(os.getenv('BACKTEST_MOVE_THRESHOLD_LARGE', '5.0'))
+
+# Report settings
+BACKTEST_REPORTS_DIR = os.getenv('BACKTEST_REPORTS_DIR', os.path.join(DATA_DIR, 'backtest_reports'))
+BACKTEST_DEFAULT_FORMAT = os.getenv('BACKTEST_DEFAULT_FORMAT', 'text')  # text, json, csv
+
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),

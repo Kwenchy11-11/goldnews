@@ -23,7 +23,8 @@ from core.event_impact_engine import (
     EventImpactEngine, 
     EventImpactResult,
     ImpactScore,
-    SurpriseResult
+    SurpriseResult,
+    analyze_event_impact
 )
 from core.surprise_engine import SurpriseEngine, EconomicDataPoint
 
@@ -262,8 +263,9 @@ class BacktestEngine:
             logger.warning(f"Could not analyze impact for {event.title}")
             return None
         
-        # Step 2: Determine prediction direction
-        predicted_direction = self._score_to_direction(impact_result.composite_score)
+        # Step 2: Determine prediction direction (access dict fields)
+        composite_score = impact_result.get('composite_score', 0) if isinstance(impact_result, dict) else impact_result.composite_score
+        predicted_direction = self._score_to_direction(composite_score)
         
         # Step 3: Fetch prices
         price_before = self._get_price_before_event(event.date, pre_event_minutes)
@@ -271,19 +273,22 @@ class BacktestEngine:
             logger.warning(f"Could not fetch price before event: {event.title}")
             return None
         
+        # Get surprise score from result
+        surprise_score = impact_result.get('surprise_score') if isinstance(impact_result, dict) else getattr(impact_result, 'surprise_score', None)
+        
         # Create result object
         result = BacktestResult(
             event_id=event.event_id or f"evt_{event.date.strftime('%Y%m%d_%H%M')}",
             event_title=event.title,
             event_date=event.date,
             event_category=event.country,  # TODO: Use proper category
-            impact_score=impact_result.composite_score,
+            impact_score=composite_score,
             predicted_direction=predicted_direction,
-            confidence=impact_result.confidence_score,
+            confidence=0.7,  # Default confidence since analyze_event_impact doesn't return it
             price_before=price_before,
             forecast=event.forecast,
             actual=event.actual,
-            surprise_score=impact_result.surprise_result.surprise_score if impact_result.surprise_result else None
+            surprise_score=surprise_score
         )
         
         # Step 4: Analyze each timeframe
@@ -315,15 +320,16 @@ class BacktestEngine:
                 except ValueError:
                     pass
             
-            # Run impact analysis
-            impact_result = self.impact_engine.analyze_event_impact(
+            # Run impact analysis using standalone function
+            impact_dict = analyze_event_impact(
                 event_name=event.title,
-                event_time=event.date,
-                source="historical_backtest",
-                data_point=data_point
+                actual=data_point.actual if data_point else 0.0,
+                forecast=data_point.forecast if data_point else 0.0,
+                previous=data_point.previous if data_point else None,
+                event_dict={"title": event.title, "country": event.country, "impact": event.impact.value}
             )
             
-            return impact_result
+            return impact_dict
             
         except Exception as e:
             logger.error(f"Error analyzing event impact: {e}")
