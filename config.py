@@ -117,6 +117,77 @@ DAY_THAI = {
     6: 'อาทิตย์',
 }
 
+# Event Impact Engine Configuration
+# =============================================================================
+
+# Composite score weights (must sum to 1.0)
+IMPACT_WEIGHT_SURPRISE = float(os.getenv('IMPACT_WEIGHT_SURPRISE', '0.7'))  # Layer 2
+IMPACT_WEIGHT_BASE = float(os.getenv('IMPACT_WEIGHT_BASE', '0.2'))        # Layer 1
+IMPACT_WEIGHT_CONSENSUS = float(os.getenv('IMPACT_WEIGHT_CONSENSUS', '0.1'))  # Layer 3
+
+# Alert thresholds (composite score thresholds)
+ALERT_THRESHOLD_IMMEDIATE = float(os.getenv('ALERT_THRESHOLD_IMMEDIATE', '6.0'))
+ALERT_THRESHOLD_HIGH = float(os.getenv('ALERT_THRESHOLD_HIGH', '4.0'))
+ALERT_THRESHOLD_NORMAL = float(os.getenv('ALERT_THRESHOLD_NORMAL', '2.0'))
+
+# Event logging database path
+EVENT_LOG_DB_PATH = os.getenv('EVENT_LOG_DB_PATH', 'data/events.db')
+
+# Pre-event alert timing (minutes before event)
+PRE_EVENT_ALERT_MINUTES = int(os.getenv('PRE_EVENT_ALERT_MINUTES', '15'))
+
+# Post-event analysis delay (minutes after event for data availability)
+POST_EVENT_DELAY_MINUTES = int(os.getenv('POST_EVENT_DELAY_MINUTES', '5'))
+
+# Impact engine feature flags
+ENABLE_IMPACT_ENGINE = os.getenv('ENABLE_IMPACT_ENGINE', 'true').lower() == 'true'
+ENABLE_PRE_EVENT_ALERTS = os.getenv('ENABLE_PRE_EVENT_ALERTS', 'true').lower() == 'true'
+ENABLE_POST_EVENT_ALERTS = os.getenv('ENABLE_POST_EVENT_ALERTS', 'true').lower() == 'true'
+ENABLE_EVENT_LOGGING = os.getenv('ENABLE_EVENT_LOGGING', 'true').lower() == 'true'
+
+# Category-specific impact multipliers (adjust base scores by category)
+CATEGORY_IMPACT_MULTIPLIERS = {
+    'inflation': float(os.getenv('INFLATION_MULTIPLIER', '1.0')),
+    'labor': float(os.getenv('LABOR_MULTIPLIER', '1.0')),
+    'fed_policy': float(os.getenv('FED_POLICY_MULTIPLIER', '1.2')),  # Fed events are high impact
+    'growth': float(os.getenv('GROWTH_MULTIPLIER', '1.0')),
+    'yields': float(os.getenv('YIELDS_MULTIPLIER', '0.9')),
+    'geopolitics': float(os.getenv('GEOPOLITICS_MULTIPLIER', '1.1')),
+    'consumer': float(os.getenv('CONSUMER_MULTIPLIER', '0.9')),
+    'manufacturing': float(os.getenv('MANUFACTURING_MULTIPLIER', '0.8')),
+    'unknown': float(os.getenv('UNKNOWN_MULTIPLIER', '0.7')),
+}
+
+# Gold impact descriptions in Thai
+GOLD_IMPACT_THAI = {
+    'strong-bullish': 'ทองคำมีแนวโน้มขึ้นแรง',
+    'bullish': 'ทองคำมีแนวโน้มขึ้น',
+    'neutral': 'ผลกระทบต่อทองคำเป็นกลาง',
+    'bearish': 'ทองคำมีแนวโน้มลง',
+    'strong-bearish': 'ทองคำมีแนวโน้มลงแรง',
+}
+
+# Alert priority translations
+ALERT_PRIORITY_THAI = {
+    'immediate': 'ทันที',
+    'high': 'สูง',
+    'normal': 'ปกติ',
+    'low': 'ต่ำ',
+}
+
+# Event category Thai names
+CATEGORY_THAI = {
+    'inflation': 'เงินเฟ้อ',
+    'labor': 'ตลาดแรงงาน',
+    'fed_policy': 'นโยบายเฟด',
+    'growth': 'การเติบโต',
+    'yields': 'ผลตอบแทนพันธบัตร',
+    'geopolitics': 'ภูมิรัฐศาสตร์',
+    'consumer': 'ผู้บริโภค',
+    'manufacturing': 'การผลิต',
+    'unknown': 'อื่นๆ',
+}
+
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
