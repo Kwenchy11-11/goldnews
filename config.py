@@ -8,9 +8,13 @@ Uses python-dotenv to load from .env file if present.
 import os
 import logging
 from dotenv import load_dotenv
+import pytz
 
 # Load .env file if it exists
 load_dotenv()
+
+# Thailand timezone
+THAI_TZ = pytz.timezone('Asia/Bangkok')
 
 # Required settings
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
@@ -26,6 +30,10 @@ ALERT_CHECK_INTERVAL = int(os.getenv('ALERT_CHECK_INTERVAL', '15'))  # minutes -
 ALERT_WINDOW_START = os.getenv('ALERT_WINDOW_START', '20:00')  # Thai time - Extended for FOMC
 ALERT_WINDOW_END = os.getenv('ALERT_WINDOW_END', '23:00')    # Thai time - Extended for FOMC
 ALERT_VOLUME_THRESHOLD = int(os.getenv('ALERT_VOLUME_THRESHOLD', '50000'))  # USD - Filter noise (was 20k, now 50k for higher quality)
+
+# Predictions auto-push settings (once per day)
+PREDICTIONS_DAILY_TIME = os.getenv('PREDICTIONS_DAILY_TIME', '08:00')  # HH:MM format (Thai time)
+PREDICTIONS_DAILY_PUSH_ENABLED = os.getenv('PREDICTIONS_DAILY_PUSH_ENABLED', 'true').lower() == 'true'
 
 # Optional settings with defaults
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '30'))  # minutes
