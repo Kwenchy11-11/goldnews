@@ -52,6 +52,7 @@ class SurpriseEngine:
         "ppi": ("bullish", "bearish"),
         # Employment data - better jobs = stronger USD = bearish for gold
         "employment": ("bearish", "bullish"),
+        "labor": ("bearish", "bullish"),  # Same as employment
         "nfp": ("bearish", "bullish"),
         "unemployment": ("bullish", "bearish"),  # Lower unemployment = bearish gold
         "jobs": ("bearish", "bullish"),
