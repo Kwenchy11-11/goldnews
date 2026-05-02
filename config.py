@@ -13,6 +13,20 @@ import pytz
 # Load .env file if it exists
 load_dotenv()
 
+# ─────────────────────────────────────────────────────────────
+# VERSION MANAGEMENT
+# ─────────────────────────────────────────────────────────────
+# v0.1 = Scoring Engine complete
+# v0.2 = Backtest + Evaluation (CURRENT)
+# v0.3 = Trade Decision + No Trade Zone
+# v0.4 = Paper Trading
+# v0.5 = Live Alert Beta
+# v1.0 = Production (after minimum statistics)
+# ─────────────────────────────────────────────────────────────
+VERSION = "0.2"
+VERSION_STAGE = "Backtest + Evaluation"
+VERSION_LABEL = f"v{VERSION} - {VERSION_STAGE}"
+
 # Base paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')

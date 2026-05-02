@@ -108,33 +108,34 @@ def format_actionable_alert(
 <b>📋 คำแนะนำระบบ:</b>
 """
     
-    # Add actionable advice based on decision
+    # Add actionable advice based on decision - v0.2 uses bias/scenario language
+    # NOT "เข้า Buy/Sell ทันที" - this is pre-production
     if "SELL" in bias or trade_decision in ["sell", "strong_sell"]:
-        message += """<b>Decision:</b> SELL GOLD
-<b>⏰ Timing:</b> WAIT 1-3 minutes after initial spike
-<b>📍 Entry Zone:</b> รอราคาย่อตัวหลัง spike แล้วเข้า
-<b>🛑 Invalidation:</b> ถ้าราคากลับมายืนเหนือ pre-news high ให้ยกเลิก bias
-<b>⏱️ Holding:</b> 15-30 นาที (scalping) หรือจนถึงระดับ TP
-<b>⚠️ Risk:</b> ใช้ position size ตาม confidence level (<50% = งด)
+        message += f"""<b>📊 Gold Bias:</b> BEARISH (ทองมีแนวโน้มลง)
+<b>📌 Scenario:</b> หาก USD แข็งค่าต่อเนื่อง → ทองมีแนวโน้มย่อตัว
+<b>⏰ Timing:</b> WAIT 1-3 นาที หลัง spike เพื่อยืนยันทิศทาง
+<b>🛑 Invalidation:</b> ถ้าราคากลับมายืนเหนือ pre-news high → bias ไม่valid
+<b>⚠️ Note:</b> นี่คือ bias จากข้อมูล ไม่ใช่สัญญาณเทรด (v{config.VERSION})
 """
     elif "BUY" in bias or trade_decision in ["buy", "strong_buy"]:
-        message += """<b>Decision:</b> BUY GOLD
-<b>⏰ Timing:</b> WAIT 1-3 minutes after initial spike
-<b>📍 Entry Zone:</b> รอราคาย่อตัวหลัง spike แล้วเข้า
-<b>🛑 Invalidation:</b> ถ้าราคาหลุดต่ำกว่า pre-news low ให้ยกเลิก bias
-<b>⏱️ Holding:</b> 15-30 นาที (scalping) หรือจนถึงระดับ TP
-<b>⚠️ Risk:</b> ใช้ position size ตาม confidence level (<50% = งด)
+        message += f"""<b>📊 Gold Bias:</b> BULLISH (ทองมีแนวโน้มขึ้น)
+<b>📌 Scenario:</b> หาก USD อ่อนค่าต่อเนื่อง → ทองมีแนวโน้มปรับตัวขึ้น
+<b>⏰ Timing:</b> WAIT 1-3 นาที หลัง spike เพื่อยืนยันทิศทาง
+<b>🛑 Invalidation:</b> ถ้าราคาหลุดต่ำกว่า pre-news low → bias ไม่valid
+<b>⚠️ Note:</b> นี่คือ bias จากข้อมูล ไม่ใช่สัญญาณเทรด (v{config.VERSION})
 """
     elif trade_decision == "wait":
-        message += """<b>Decision:</b> ⏸️ WAIT
-<b>⏰ Timing:</b> รอดูสัญญาณชัดเจนกว่านี้
+        message += f"""<b>📊 Gold Bias:</b> UNCLEAR (ทิศทางไม่ชัดเจน)
+<b>📌 Scenario:</b> รอดู confirmation ก่อนตัดสินใจ
 <b>💡 Reason:</b> ข้อมูลยังไม่ชัดเจนพอหรือมีความขัดแย้ง
 <b>📍 Action:</b> เฝ้าดูราคา ไม่เข้า position ในตอนนี้
+<b>⚠️ Note:</b> v{config.VERSION} - ยังอยู่ในช่วงทดสอบ
 """
     else:
-        message += """<b>Decision:</b> ❌ NO TRADE
-<b>💡 Reason:</b> สัญญาณไม่ผ่านเกณฑ์ minimum threshold
+        message += f"""<b>📊 Gold Bias:</b> NEUTRAL (ไม่มี bias ชัดเจน)
+<b>💡 Reason:</b> คะแนนไม่ผ่านเกณฑ์ minimum threshold
 <b>📍 Action:</b> ข้ามข่าวนี้ รอโอกาสถัดไป
+<b>⚠️ Note:</b> v{config.VERSION} - ยังอยู่ในช่วงทดสอบ
 """
     
     message += f"\n{'─' * 35}"
