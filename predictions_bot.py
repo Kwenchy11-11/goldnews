@@ -872,8 +872,24 @@ def process_update(update: dict) -> bool:
 
     update_id = update.get('update_id')
     message = update.get('message', {})
-    chat_id = message.get('chat', {}).get('id')
-    text = message.get('text', '').strip()
+
+    # Also handle callback queries from inline keyboards
+    callback = update.get('callback_query')
+    if callback and not message:
+        chat_id = callback.get('message', {}).get('chat', {}).get('id')
+        data = callback.get('data', '').strip()
+        text = data
+        logger.info(f"[callback] user={callback.get('from', {}).get('id')} chat={chat_id} text='{text}'")
+        # Answer callback query to remove loading spinner
+        _answer_callback_query(callback.get('id'))
+    else:
+        chat_id = message.get('chat', {}).get('id')
+        text = message.get('text', '').strip()
+        from_user = message.get('from', {})
+        logger.info(
+            f"[message] user={from_user.get('id')} chat={chat_id} "
+            f"text='{text}'"
+        )
 
     # Skip if we've already processed this update
     if _last_update_id is not None and update_id <= _last_update_id:
@@ -881,19 +897,51 @@ def process_update(update: dict) -> bool:
 
     _last_update_id = update_id
 
-    # Route commands (both /commands and button text)
-    text_lower = text.lower()
+    # Normalize: strip variation selectors, lowercase
+    text_lower = _normalize_button_text(text).lower()
 
-    if text_lower in ('/predictions', '/prediction', '🎯 predictions', 'predictions'):
+    # Route commands and button text (robust matching)
+    if _matches(text_lower, ['/predictions', '/prediction', 'predictions']):
         return handle_predictions_command(chat_id)
-    elif text_lower in ('/alerts', '🔔 alerts', 'alerts'):
+    elif _matches(text_lower, ['/alerts', 'alerts']):
         return handle_alerts_command(chat_id)
-    elif text_lower in ('/help', '❓ help', 'help'):
+    elif _matches(text_lower, ['/help', 'help']):
         return handle_help_command(chat_id)
-    elif text_lower in ('/start', 'start'):
+    elif _matches(text_lower, ['/start', 'start']):
         return handle_start_command(chat_id)
 
     return False
+
+
+def _normalize_button_text(text: str) -> str:
+    """Normalize button text by removing emoji variation selectors and trimming."""
+    # Remove U+FE0F (variation selector-16) and U+FE0E (variation selector-15)
+    text = text.replace('\ufe0f', '').replace('\ufe0e', '')
+    # Strip whitespace
+    text = text.strip()
+    return text
+
+
+def _matches(text: str, patterns: list) -> bool:
+    """Check if text matches any pattern exactly, or contains the pattern keyword."""
+    for pattern in patterns:
+        if text == pattern:
+            return True
+        # Support "🎯 Predictions" matching "predictions"
+        if pattern in text:
+            return True
+    return False
+
+
+def _answer_callback_query(callback_query_id: str) -> None:
+    """Answer a callback query to remove the loading spinner."""
+    if not callback_query_id:
+        return
+    url = f"https://api.telegram.org/bot{PREDICTIONS_BOT_TOKEN}/answerCallbackQuery"
+    try:
+        requests.post(url, json={'callback_query_id': callback_query_id}, timeout=5)
+    except Exception as e:
+        logger.debug(f"Failed to answer callback query: {e}")
 
 
 def auto_push_predictions():
