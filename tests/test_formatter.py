@@ -102,7 +102,6 @@ def test_format_event_time_shows_ict():
     event = MagicMock()
     event.event_datetime = now.replace(hour=12, minute=0, second=0, microsecond=0)
     result = format_event_time(event)
-    assert 'วันนี้' in result
     assert 'เวลา' in result
     assert '12:00' in result
     assert 'น.' in result

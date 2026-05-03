@@ -231,7 +231,7 @@ class TestTradeClosing:
         trade.close_trade(2026.20, exit_time, ExitReason.TAKE_PROFIT)
         
         assert trade.result == TradeResult.WIN
-        assert trade.pnl_points == 120.0  # 120 points profit
+        assert trade.pnl_points == pytest.approx(120.0, abs=0.01)
         assert trade.exit_reason == ExitReason.TAKE_PROFIT
     
     def test_close_trade_loss(self):
@@ -253,7 +253,7 @@ class TestTradeClosing:
         trade.close_trade(2024.30, exit_time, ExitReason.STOP_LOSS)
         
         assert trade.result == TradeResult.LOSS
-        assert trade.pnl_points == -70.0  # 70 points loss
+        assert trade.pnl_points == pytest.approx(-70.0, abs=0.01)
         assert trade.exit_reason == ExitReason.STOP_LOSS
     
     def test_close_trade_breakeven(self):
@@ -403,14 +403,14 @@ class TestDatabaseOperations:
             sl_points=50.0,
         )
         
-        # Update with price that moves in favor
+        # Update with price that moves in favor (but not at TP)
         timestamp = datetime.now() + timedelta(minutes=5)
-        logger.update_trade_with_price(trade.trade_id, 2026.00, timestamp)
-        
+        logger.update_trade_with_price(trade.trade_id, 2025.80, timestamp)
+
         # Retrieve and check MFE
         updated = logger.get_trade(trade.trade_id)
-        assert updated.max_favorable_excursion == 100.0
-        assert updated.result == TradeResult.OPEN  # Not closed yet
+        assert updated.max_favorable_excursion == pytest.approx(80.0, abs=0.01)
+        assert updated.result == TradeResult.OPEN  # Not closed yet (below TP at 2026.0)
     
     def test_tp_hit_closes_trade(self, tmp_path):
         """TP hit should automatically close trade."""
@@ -511,7 +511,7 @@ class TestPerformanceReporting:
         assert perf.wins == 1
         assert perf.losses == 1
         assert perf.win_rate == 50.0
-        assert perf.total_pnl_points == 100.0  # 150 - 75
+        assert perf.total_pnl_points == pytest.approx(75.0, abs=0.01)  # 150 - 75
     
     def test_export_weekly_report(self, tmp_path):
         """Export weekly performance to JSON."""
@@ -604,10 +604,10 @@ class TestMockPriceScenarios:
             sl_points=50.0,
         )
         
-        # Simulate price action: dip first, then rally to TP
+        # Simulate price action: dip first (near SL but not hitting), then rally to TP
         prices = [
-            (2024.50, base_time + timedelta(minutes=1)),   # -50 points (MAE)
-            (2024.30, base_time + timedelta(minutes=2)),   # -70 points (worse MAE)
+            (2024.60, base_time + timedelta(minutes=1)),   # -40 points (near SL at -50)
+            (2024.55, base_time + timedelta(minutes=2)),   # -45 points (closer to SL but not hit)
             (2024.80, base_time + timedelta(minutes=3)),   # recovering
             (2025.50, base_time + timedelta(minutes=5)),   # +50 points
             (2026.00, base_time + timedelta(minutes=8)),   # +100 points (TP hit!)
@@ -620,11 +620,11 @@ class TestMockPriceScenarios:
         updated = logger.get_trade(trade.trade_id)
         assert updated.result == TradeResult.WIN
         assert updated.exit_reason == ExitReason.TAKE_PROFIT
-        assert updated.max_adverse_excursion == 70.0  # Worst drawdown
-        assert updated.max_favorable_excursion >= 100.0  # Hit TP
-        
+        assert updated.max_adverse_excursion == pytest.approx(45.0, abs=0.01)
+        assert updated.max_favorable_excursion >= 100.0
+
         # Add note about the volatility
-        updated.notes = "High volatility after release, hit SL zone briefly before TP"
+        updated.notes = "High volatility after release, near SL zone briefly before TP"
         logger._save_trade(updated)
     
     def test_scenario_nfp_mixed_signals_stopout(self, tmp_path):
